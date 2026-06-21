@@ -42,13 +42,9 @@ $pyEx = "$VenvDir\Scripts\python.exe"
 & $pip install --upgrade pip -q
 
 # --- Requirements ------------------------------------------------------------
-$reqPath = Join-Path $InstallDir "requirements.txt"
-if (Test-Path $reqPath) {
-    Info "Installing Python requirements ..."
-    & $pip install -r $reqPath -q
-} else {
-    Warn "requirements.txt not found at $reqPath — skipping."
-}
+Info "Installing JARVIS package ..."
+& $pip install -e "$InstallDir[windows]" -q
+if ($LASTEXITCODE -ne 0) { Warn "Some packages failed to install (non-fatal)." }
 
 # --- Playwright -------------------------------------------------------------
 Info "Installing Playwright Chromium ..."
