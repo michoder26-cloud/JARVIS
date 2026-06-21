@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-assistant"
-version = "0.3.0"
+version = "0.3.1"
 description = "JARVIS — Voice-controlled AI assistant inspired by Iron Man"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,9 +13,7 @@ authors = [{name = "JARVIS Project"}]
 
 dependencies = [
     "faster-whisper>=1.2.0",
-    "RealtimeSTT>=1.0.0",
     "edge-tts>=7.0.0",
-    "sounddevice>=0.4.0",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
     "pyautogui>=0.9.54",
@@ -27,7 +25,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-windows = ["pywinauto>=0.6.9"]
+voice = [
+    "RealtimeSTT>=1.0.0",
+    "sounddevice>=0.4.0",
+]
+windows = [
+    "pywinauto>=0.6.9",
+    "sounddevice>=0.4.0",
+    "RealtimeSTT>=1.0.0",
+]
+full = [
+    "RealtimeSTT>=1.0.0",
+    "sounddevice>=0.4.0",
+    "pywinauto>=0.6.9",
+]
 
 [project.scripts]
 jarvis = "jarvis.main:main"

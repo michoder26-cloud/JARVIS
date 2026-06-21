@@ -67,19 +67,27 @@ python -m pip install --upgrade pip -q
 # --- Requirements ------------------------------------------------------------
 info "Installing JARVIS package ..."
 
-# Use pyproject.toml with platform-specific extras
+# Core install (no heavy deps like PyTorch)
+# Voice extras (RealtimeSTT + sounddevice) installed separately
 if [ "$OS_TYPE" = "Darwin" ]; then
-    # macOS: skip pywinauto (Windows-only)
-    pip install -e "${JARVIS_DIR}" -q || \
+    # macOS: core + voice (no pywinauto)
+    pip install -e "${JARVIS_DIR}[voice]" -q || \
         warn "Some packages failed to install (non-fatal)."
 elif [ "$OS_TYPE" = "Linux" ]; then
-    # Linux: also skip pywinauto
-    pip install -e "${JARVIS_DIR}" -q || \
+    # Linux: core + voice (no pywinauto)
+    pip install -e "${JARVIS_DIR}[voice]" -q || \
         warn "Some packages failed to install (non-fatal)."
 else
-    # Windows (Git Bash / WSL): include pywinauto
-    pip install -e "${JARVIS_DIR}[windows]" -q || \
+    # Windows: core + voice + windows (pywinauto)
+    pip install -e "${JARVIS_DIR}[full]" -q || \
         warn "Some packages failed to install (non-fatal)."
+fi
+
+# If RealtimeSTT failed (PyTorch too heavy), install core only
+if ! python -c "import RealtimeSTT" 2>/dev/null; then
+    warn "RealtimeSTT not available — installing core only."
+    warn "Voice input needs RealtimeSTT. Text mode (--text-mode) still works."
+    pip install -e "${JARVIS_DIR}" -q 2>/dev/null || true
 fi
 
 # --- Playwright -------------------------------------------------------------

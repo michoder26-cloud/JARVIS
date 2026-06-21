@@ -43,8 +43,12 @@ $pyEx = "$VenvDir\Scripts\python.exe"
 
 # --- Requirements ------------------------------------------------------------
 Info "Installing JARVIS package ..."
-& $pip install -e "$InstallDir[windows]" -q
-if ($LASTEXITCODE -ne 0) { Warn "Some packages failed to install (non-fatal)." }
+& $pip install -e "$InstallDir[full]" -q
+if ($LASTEXITCODE -ne 0) {
+    Warn "Full install failed — trying core only ..."
+    & $pip install -e "$InstallDir" -q
+    if ($LASTEXITCODE -ne 0) { Warn "Some packages failed to install (non-fatal)." }
+}
 
 # --- Playwright -------------------------------------------------------------
 Info "Installing Playwright Chromium ..."
