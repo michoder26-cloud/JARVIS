@@ -1,0 +1,28 @@
+llm:
+  model: glm-5.2
+  base_url: https://ollama.com/v1
+  # API key: set OLLAMA_API_KEY in .env or environment
+  
+stt:
+  model: base              # tiny/base/small/medium/large-v3
+  language: auto            # auto-detect (th/en/de)
+  wake_word: "jarvis"
+  silence_threshold: 0.5   # seconds of silence to stop recording
+
+tts:
+  voice: th-TH-PremwadeeNeural   # default Thai female
+  # Options: th-TH-PremwadeeNeural (female), th-TH-NiwatNeural (male)
+  #          en-US-AriaNeural (female), en-US-GuyNeural (male)
+  #          de-DE-KatjaNeural (female), de-DE-ConradNeural (male)
+  rate: 0                    # 0 = normal, +50 = faster, -20 = slower
+  volume: 0                  # 0 = normal, +100 = max, -50 = quieter
+
+automation:
+  browser: playwright
+  desktop: pyautogui
+
+hotkey:
+  push_to_talk: ctrl+space   # alternative to wake word
+
+logging:
+  level: INFO
