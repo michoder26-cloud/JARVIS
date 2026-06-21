@@ -17,17 +17,112 @@ Say **"Jarvis, open YouTube"** — and it opens Chrome, navigates to YouTube, an
 
 ## Quick Install
 
-### Linux / WSL
+### macOS
+
+#### 1. ติดตั้ง Homebrew (ถ้ายังไม่มี)
 ```bash
-git clone <repo> Jarvis && cd Jarvis
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+#### 2. ติดตั้ง Python 3.10+ (ถ้ายังไม่มี)
+```bash
+brew install python@3.12
+```
+
+#### 3. ดาวน์โหลด JARVIS
+```bash
+git clone https://github.com/michoder26-cloud/JARVIS.git
+cd JARVIS
+```
+
+#### 4. ติดตั้ง
+```bash
 bash install.sh
 ```
 
-### Windows (PowerShell)
+#### 5. ตั้งค่า API Key
+```bash
+echo 'export OLLAMA_API_KEY=ใส่keyของคุณที่นี่' >> ~/.zshrc
+source ~/.zshrc
+```
+
+#### 6. รัน
+```bash
+jarvis
+```
+
+> ถ้า `jarvis` ไม่พบ ให้รัน: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc`
+
+---
+
+### Linux / WSL
+
+#### 1. ติดตั้ง Python 3.10+ (ถ้ายังไม่มี)
+```bash
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+```
+
+#### 2. ดาวน์โหลด JARVIS
+```bash
+git clone https://github.com/michoder26-cloud/JARVIS.git
+cd JARVIS
+```
+
+#### 3. ติดตั้ง
+```bash
+bash install.sh
+```
+
+#### 4. ตั้งค่า API Key
+```bash
+echo 'export OLLAMA_API_KEY=ใส่keyของคุณที่นี่' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### 5. รัน
+```bash
+jarvis
+```
+
+> ถ้า `jarvis` ไม่พบ ให้รัน: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
+
+---
+
+### Windows
+
+#### 1. ติดตั้ง Python 3.10+
+ดาวน์โหลดจาก https://python.org และติดตั้ง (ติ๊ก "Add Python to PATH")
+
+#### 2. ดาวน์โหลด JARVIS
+เปิด PowerShell:
 ```powershell
-git clone <repo> Jarvis; cd Jarvis
+git clone https://github.com/michoder26-cloud/JARVIS.git
+cd JARVIS
+```
+
+#### 3. ติดตั้ง
+```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
+
+#### 4. ตั้งค่า API Key
+```powershell
+[System.Environment]::SetEnvironmentVariable("OLLAMA_API_KEY", "ใส่keyของคุณที่นี่", "User")
+```
+ปิด PowerShell แล้วเปิดใหม่
+
+#### 5. รัน
+```powershell
+jarvis
+```
+
+---
+
+### ไม่มีไมโครโฟน? ใช้ text mode
+```bash
+jarvis --text-mode
+```
+พิมพ์คำสั่งแทนพูด — AI + actions ทำงานปกติ แค่ไม่ต้องพูด
 
 ## Usage
 
