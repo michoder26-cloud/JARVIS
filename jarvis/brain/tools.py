@@ -332,6 +332,86 @@ THINK = _tool(
     required=["thought"],
 )
 
+# --------------------------------------------------------------------------- #
+# Smart / vision-guided actions
+# --------------------------------------------------------------------------- #
+
+SMART_CLICK = _tool(
+    name="smart_click",
+    description="Find and click a UI element by visual description. Use this when the user asks to click something but you don't know exact coordinates. Example: smart_click('the play button')",
+    properties={
+        "description": {"type": "string", "description": "Visual description of the element to click, e.g. 'the blue Submit button', 'the YouTube search box'"},
+    },
+    required=["description"],
+)
+
+SMART_TYPE = _tool(
+    name="smart_type",
+    description="Find a text field by visual description, click it, and type text. Use this when the user wants to type something into a specific field. Example: smart_type('the email field', 'user@example.com')",
+    properties={
+        "field_description": {"type": "string", "description": "Visual description of the text field, e.g. 'the search box', 'the password field'"},
+        "text": {"type": "string", "description": "Text to type into the field"},
+    },
+    required=["field_description", "text"],
+)
+
+OPEN_WEBSITE = _tool(
+    name="open_website",
+    description="Open a website in the browser by controlling the computer like a human. Finds the address bar visually, types the URL, and presses Enter. Use this instead of open_browser when you want human-like control.",
+    properties={
+        "url": {"type": "string", "description": "URL to open, e.g. 'youtube.com', 'google.com'"},
+    },
+    required=["url"],
+)
+
+SCROLL = _tool(
+    name="scroll",
+    description="Scroll the screen up or down.",
+    properties={
+        "direction": {"type": "string", "enum": ["up", "down"], "description": "Scroll direction"},
+        "clicks": {"type": "integer", "description": "Number of scroll clicks (default 3)"},
+    },
+    required=["direction"],
+)
+
+SWITCH_WINDOW = _tool(
+    name="switch_window",
+    description="Switch to the next window (Alt+Tab). Use when user says 'switch window' or 'go to the other app'.",
+    properties={},
+    required=[],
+)
+
+VERIFY_SCREEN = _tool(
+    name="verify_screen",
+    description="Take a screenshot and check if something specific is visible on screen. Use this to verify an action succeeded. Example: verify_screen('YouTube is open and showing the homepage')",
+    properties={
+        "description": {"type": "string", "description": "What to look for on screen"},
+    },
+    required=["description"],
+)
+
+
+EXECUTE_VISUAL_TASK = _tool(
+    name="execute_visual_task",
+    description=(
+        "Execute a complex multi-step computer task using vision. JARVIS "
+        "will see the screen, decide what to do, and perform actions step "
+        "by step until the task is complete. Use this for tasks that "
+        "require multiple steps like 'open YouTube and search for Thai "
+        "music' or 'open Gmail and send an email to John'."
+    ),
+    properties={
+        "command": {
+            "type": "string",
+            "description": (
+                "The full task description in the user's language, e.g. "
+                "'open YouTube and search for Thai music'."
+            ),
+        },
+    },
+    required=["command"],
+)
+
 
 # --------------------------------------------------------------------------- #
 # Aggregate list — passed to ollama.chat(tools=ALL_TOOLS)
@@ -353,6 +433,13 @@ ALL_TOOLS: List[Dict[str, Any]] = [
     ASK_USER,
     MEMORY_MANAGE,
     THINK,
+    SMART_CLICK,
+    SMART_TYPE,
+    OPEN_WEBSITE,
+    SCROLL,
+    SWITCH_WINDOW,
+    VERIFY_SCREEN,
+    EXECUTE_VISUAL_TASK,
 ]
 
 # Quick name → schema lookup.

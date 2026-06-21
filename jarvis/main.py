@@ -157,6 +157,7 @@ class JarvisApp:
         # --- State ---
         self._stop = threading.Event()
         self._processing = threading.Lock()  # prevent overlapping commands
+        self._vision_loop = None  # active VisionActionLoop, if any
 
         # --- Startup greeting ---
         self._started = False
@@ -294,6 +295,48 @@ class JarvisApp:
             self._processing.release()
 
     # ------------------------------------------------------------------ #
+    # Vision-action loop — autonomous multi-step tasks
+    # ------------------------------------------------------------------ #
+    def _run_visual_task(self, command: str) -> dict:
+        """Create a VisionActionLoop and run a complex multi-step task.
+
+        Called from :meth:`_dispatch_action` when the LLM invokes the
+        ``execute_visual_task`` tool.  Uses the live LLM, speaker, and a
+        lazily-created ScreenVision instance.
+        """
+        if not command:
+            return {"success": False, "error": "No command provided."}
+        try:
+            from jarvis.vision.loop import VisionActionLoop
+            from jarvis.vision.eyes import ScreenVision
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Vision modules unavailable: %s", exc)
+            return {
+                "success": False,
+                "error": f"Vision unavailable: {exc}",
+            }
+
+        try:
+            eyes = ScreenVision()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ScreenVision init failed: %s", exc)
+            eyes = None
+
+        loop = VisionActionLoop(
+            llm_client=self.llm,
+            speaker=self.speaker,
+            screen_vision=eyes,
+            max_steps=10,
+        )
+        self._vision_loop = loop  # expose so a "stop" command can halt it
+        try:
+            result = loop.execute_task(command)
+        finally:
+            self._vision_loop = None
+        logger.info("VisionActionLoop result: %s", result.get("success"))
+        return result
+
+    # ------------------------------------------------------------------ #
     # Action dispatch — called by LLM function calling
     # ------------------------------------------------------------------ #
     def _dispatch_action(self, name: str, args: dict) -> dict:
@@ -323,6 +366,12 @@ class JarvisApp:
             handler = ACTION_REGISTRY.get("screenshot")
             if handler:
                 return handler()
+
+        # --- Special case: execute_visual_task (vision-action loop) ---
+        # Needs live access to the LLM, speaker, and ScreenVision, so it
+        # is wired here rather than via the static ACTION_REGISTRY.
+        if name == "execute_visual_task":
+            return self._run_visual_task(args.get("command", ""))
 
         # --- Default: dispatch via execute_action ---
         result = execute_action(name, args)

@@ -39,6 +39,16 @@ from jarvis.actions.search import (
 from jarvis.actions.news import (
     get_news,
 )
+from jarvis.actions.smart import (
+    smart_click,
+    smart_type,
+    open_website,
+    scroll,
+    switch_window,
+    close_window,
+    verify_screen,
+    smart_navigate,
+)
 
 # Type alias for an action handler.
 ActionHandler = Callable[..., Dict]
@@ -67,6 +77,15 @@ ACTION_REGISTRY: Dict[str, ActionHandler] = {
     # Memory & reasoning
     "memory_manage": memory_manage,
     "think": think,
+    # Smart / vision-guided actions
+    "smart_click": smart_click,
+    "smart_type": smart_type,
+    "open_website": open_website,
+    "scroll": scroll,
+    "switch_window": switch_window,
+    "close_window": close_window,
+    "verify_screen": verify_screen,
+    "smart_navigate": smart_navigate,
 }
 
 
