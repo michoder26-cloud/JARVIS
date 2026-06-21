@@ -208,15 +208,32 @@ SEARCH_WEB = _tool(
     name="search_web",
     description=(
         "Search the web and return text results. Use this when the user "
-        "asks a factual question or wants to look something up."
+        "asks a factual question or wants to look something up. "
+        "Returns actual text snippets (title + snippet + url) from "
+        "DuckDuckGo, so you can summarize and speak the answer aloud."
     ),
     properties={
         "query": {
             "type": "string",
             "description": "The search query.",
         },
+        "max_results": {
+            "type": "integer",
+            "description": "Max results to return (default 5).",
+        },
     },
     required=["query"],
+)
+
+
+GET_NEWS = _tool(
+    name="get_news",
+    description="Get latest news headlines from RSS feeds. Use this when the user asks for news. Supports Thai and English news sources.",
+    properties={
+        "max_items": {"type": "integer", "description": "Max headlines to return (default 5)"},
+        "category": {"type": "string", "description": "News category: general, tech, business"},
+    },
+    required=[],
 )
 
 
@@ -270,6 +287,52 @@ ASK_USER = _tool(
 )
 
 
+MEMORY_MANAGE = _tool(
+    name="memory_manage",
+    description=(
+        "Read, add, update, or remove entries in persistent memory. Use "
+        "this to remember user preferences, facts, and context across "
+        "sessions."
+    ),
+    properties={
+        "action": {
+            "type": "string",
+            "enum": ["read", "add", "update", "remove"],
+            "description": "Memory action",
+        },
+        "entry": {
+            "type": "string",
+            "description": (
+                "Entry to add/remove/update (for add/remove/update "
+                "actions)."
+            ),
+        },
+        "new_entry": {
+            "type": "string",
+            "description": "New text for update action.",
+        },
+    },
+    required=["action"],
+)
+
+
+THINK = _tool(
+    name="think",
+    description=(
+        "A reasoning scratchpad. Think through a problem step by step "
+        "before acting. Your thought is not spoken to the user. Use this "
+        "for complex multi-step commands."
+    ),
+    properties={
+        "thought": {
+            "type": "string",
+            "description": "Your reasoning process.",
+        },
+    },
+    required=["thought"],
+)
+
+
 # --------------------------------------------------------------------------- #
 # Aggregate list — passed to ollama.chat(tools=ALL_TOOLS)
 # --------------------------------------------------------------------------- #
@@ -284,9 +347,12 @@ ALL_TOOLS: List[Dict[str, Any]] = [
     SCREENSHOT,
     SYSTEM_COMMAND,
     SEARCH_WEB,
+    GET_NEWS,
     GET_WEATHER,
     GET_TIME,
     ASK_USER,
+    MEMORY_MANAGE,
+    THINK,
 ]
 
 # Quick name → schema lookup.

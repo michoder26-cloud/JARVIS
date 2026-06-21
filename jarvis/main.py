@@ -38,6 +38,10 @@ from jarvis.utils import list_input_devices, get_default_input_device
 from jarvis.brain import LLMClient, JARVIS_PROMPT, ALL_TOOLS, ConversationHistory
 from jarvis.brain.tools import register_handlers, dispatch_tool
 from jarvis.actions.registry import ACTION_REGISTRY, execute_action
+from jarvis.actions.memory import MEMORY_FILE
+from jarvis.security import InjectionScanner
+from jarvis.sessions import SessionStore
+from jarvis.digest import morning_briefing
 
 logger = logging.getLogger("jarvis")
 
@@ -78,6 +82,8 @@ class JarvisApp:
         config: dict,
         lang_override: Optional[str] = None,
         model_override: Optional[str] = None,
+        new_session: bool = False,
+        session_id: str = "default",
     ) -> None:
         self.config = config
         stt_cfg = config.get("stt", {})
@@ -117,9 +123,36 @@ class JarvisApp:
             max_messages=20,
         )
 
+        # --- Session persistence (SQLite) ---
+        self.session_id = session_id
+        self.session_store = SessionStore()
+        self._restored_count = 0
+        if not new_session:
+            try:
+                past_msgs = self.session_store.messages_as_history(
+                    session_id, limit=50
+                )
+                for m in past_msgs:
+                    if m["role"] == "user":
+                        self.history.add_user(m["content"])
+                    elif m["role"] == "assistant":
+                        self.history.add_assistant(m["content"])
+                self._restored_count = len(past_msgs)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to restore session history: %s", exc)
+        else:
+            # Fresh session — clear any prior messages for this id.
+            try:
+                self.session_store.clear_session(session_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to clear session %s: %s", session_id, exc)
+
         # --- Wire action handlers into brain's tool dispatch ---
         # Register all ACTION_REGISTRY handlers with the brain's tool system.
         register_handlers(dict(ACTION_REGISTRY))
+
+        # --- Security: prompt-injection scanner ---
+        self.scanner = InjectionScanner()
 
         # --- State ---
         self._stop = threading.Event()
@@ -131,6 +164,48 @@ class JarvisApp:
     # ------------------------------------------------------------------ #
     # Transcript handler — the brain of JARVIS
     # ------------------------------------------------------------------ #
+    def _load_memory(self) -> str:
+        """Read persistent memory and return it as a context string.
+
+        Returns an empty string if there is no memory file or it is empty
+        so that callers can simply prepend the result to the system prompt.
+        """
+        try:
+            if MEMORY_FILE.exists():
+                text = MEMORY_FILE.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not load memory file %s: %s", MEMORY_FILE, exc)
+        return ""
+
+    @staticmethod
+    def _inject_memory_context(messages: list, memory_text: str) -> list:
+        """Return a copy of *messages* with persistent memory injected.
+
+        The memory is appended to the system prompt (the first message
+        with ``role == "system"``) so the model sees it as additional
+        context rather than a user turn.
+        """
+        if not memory_text:
+            return messages
+        memory_block = (
+            "\n# Persistent Memory\n"
+            "The following facts and preferences have been remembered "
+            "across sessions. Use them to personalise responses but do not "
+            "mention the memory file itself to the user.\n\n"
+            f"{memory_text}\n"
+        )
+        updated = []
+        for msg in messages:
+            if msg.get("role") == "system" and "content" in msg:
+                new_msg = dict(msg)
+                new_msg["content"] = msg["content"] + memory_block
+                updated.append(new_msg)
+            else:
+                updated.append(msg)
+        return updated
+
     def _on_transcript(self, text: str) -> None:
         """Handle a recognised command: send to LLM, execute tools, speak."""
         if not text.strip():
@@ -144,11 +219,39 @@ class JarvisApp:
         try:
             print(f"\n[YOU] {text}")
 
+            # --- Security: scan user input for prompt-injection attempts ---
+            scan_result = self.scanner.scan(text)
+            if scan_result["has_threat"]:
+                level = scan_result["level"]
+                logger.warning(
+                    "Prompt-injection scan: level=%s threats=%s",
+                    level,
+                    [t["pattern_name"] for t in scan_result["threats"]],
+                )
+                if level == "high":
+                    # Block the input — do not send it to the LLM.
+                    reject = "คำสั่งนี้ดูไม่ปลอดภัย ขอข้ามไปครับ"
+                    print(f"[JARVIS] {reject}")
+                    self.speaker.speak(reject)
+                    return
+                # medium / low: log a warning but continue processing.
+
             # Add user message to conversation history.
             self.history.add_user(text)
+            # Persist user message to SQLite session store.
+            try:
+                self.session_store.save_message(
+                    self.session_id, "user", text
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to persist user message: %s", exc)
 
-            # Get messages + tools for LLM.
+            # Get messages + tools for LLM, injecting persistent memory as
+            # additional context for the model.
             messages = self.history.get_messages()
+            memory_text = self._load_memory()
+            if memory_text:
+                messages = self._inject_memory_context(messages, memory_text)
 
             # Call LLM with function calling.
             response = self.llm.chat_with_tools(
@@ -164,6 +267,13 @@ class JarvisApp:
                 print(f"[JARVIS] {reply}")
                 self.speaker.speak(reply)
                 self.history.add_assistant(reply)
+                # Persist assistant reply to SQLite session store.
+                try:
+                    self.session_store.save_message(
+                        self.session_id, "assistant", reply
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Failed to persist assistant message: %s", exc)
             else:
                 # No text response — check if tools were called.
                 tool_results = response.get("tool_results", [])
@@ -225,6 +335,8 @@ class JarvisApp:
     def run(self) -> None:
         """Start the listener and block until interrupted."""
         print(BANNER)
+        if self._restored_count > 0:
+            print(f"Restored {self._restored_count} messages from last session.")
         print("JARVIS initialised. Say 'Jarvis' to give a command.\n")
 
         # Quick audio device sanity check.
@@ -306,6 +418,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="List audio devices and exit")
     p.add_argument("--text-mode", action="store_true",
                    help="Start in text-only mode (no microphone needed)")
+    p.add_argument("--briefing", action="store_true",
+                   help="Generate and speak a morning briefing, then exit")
+    p.add_argument("--location", default="Bangkok",
+                   help="Location for briefing weather")
+    p.add_argument("--new-session", action="store_true",
+                   help="Start a fresh session (don't load old messages)")
+    p.add_argument("--sessions", action="store_true",
+                   help="List all stored sessions and exit")
     return p
 
 
@@ -332,10 +452,26 @@ def main(argv: Optional[list] = None) -> int:
         print_audio_info()
         return 0
 
+    # --sessions: list sessions and exit.
+    if args.sessions:
+        store = SessionStore()
+        sessions = store.list_sessions()
+        if not sessions:
+            print("No sessions found.")
+        else:
+            print(f"Sessions ({len(sessions)}):")
+            for s in sessions:
+                print(
+                    f"  {s['id']:<20} created={s['created_at']} "
+                    f"updated={s['updated_at']}"
+                )
+        return 0
+
     app = JarvisApp(
         config,
         lang_override=args.lang,
         model_override=args.model,
+        new_session=args.new_session,
     )
 
     # Override LLM model if specified.
@@ -346,6 +482,13 @@ def main(argv: Optional[list] = None) -> int:
     def _sigint(*_):
         app.shutdown()
     signal.signal(signal.SIGINT, _sigint)
+
+    # --briefing: generate and speak a morning briefing, then exit.
+    if args.briefing:
+        print("Generating morning briefing...")
+        text = morning_briefing(app.llm, app.speaker, location=args.location)
+        print(f"[BRIEFING] {text}")
+        return 0
 
     if args.text_mode:
         app._text_mode_loop()

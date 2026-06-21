@@ -12,7 +12,6 @@ from typing import Callable, Dict
 from jarvis.actions.browser import (
     open_browser,
     search_youtube,
-    search_web,
     navigate_to,
     close_browser,
     take_browser_screenshot,
@@ -30,6 +29,16 @@ from jarvis.actions.system import (
     get_time,
     get_weather,
 )
+from jarvis.actions.memory import (
+    memory_manage,
+    think,
+)
+from jarvis.actions.search import (
+    search_web_api,
+)
+from jarvis.actions.news import (
+    get_news,
+)
 
 # Type alias for an action handler.
 ActionHandler = Callable[..., Dict]
@@ -38,7 +47,7 @@ ACTION_REGISTRY: Dict[str, ActionHandler] = {
     # Browser
     "open_browser": open_browser,
     "search_youtube": search_youtube,
-    "search_web": search_web,
+    "search_web": search_web_api,
     "navigate_to": navigate_to,
     "close_browser": close_browser,
     "take_browser_screenshot": take_browser_screenshot,
@@ -53,6 +62,11 @@ ACTION_REGISTRY: Dict[str, ActionHandler] = {
     "system_command": system_command,
     "get_time": get_time,
     "get_weather": get_weather,
+    # News
+    "get_news": get_news,
+    # Memory & reasoning
+    "memory_manage": memory_manage,
+    "think": think,
 }
 
 
