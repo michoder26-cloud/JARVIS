@@ -1,0 +1,140 @@
+diff --git a/install.ps1 b/install.ps1
+index 7546765..1868e34 100644
+--- a/install.ps1
++++ b/install.ps1
+@@ -43,8 +43,12 @@ $pyEx = "$VenvDir\Scripts\python.exe"
+ 
+ # --- Requirements ------------------------------------------------------------
+ Info "Installing JARVIS package ..."
+-& $pip install -e "$InstallDir[windows]" -q
+-if ($LASTEXITCODE -ne 0) { Warn "Some packages failed to install (non-fatal)." }
++& $pip install -e "$InstallDir[full]" -q
++if ($LASTEXITCODE -ne 0) {
++    Warn "Full install failed — trying core only ..."
++    & $pip install -e "$InstallDir" -q
++    if ($LASTEXITCODE -ne 0) { Warn "Some packages failed to install (non-fatal)." }
++}
+ 
+ # --- Playwright -------------------------------------------------------------
+ Info "Installing Playwright Chromium ..."
+diff --git a/install.sh b/install.sh
+index 4f307cc..8065c70 100755
+--- a/install.sh
++++ b/install.sh
+@@ -67,21 +67,29 @@ python -m pip install --upgrade pip -q
+ # --- Requirements ------------------------------------------------------------
+ info "Installing JARVIS package ..."
+ 
+-# Use pyproject.toml with platform-specific extras
++# Core install (no heavy deps like PyTorch)
++# Voice extras (RealtimeSTT + sounddevice) installed separately
+ if [ "$OS_TYPE" = "Darwin" ]; then
+-    # macOS: skip pywinauto (Windows-only)
+-    pip install -e "${JARVIS_DIR}" -q || \
++    # macOS: core + voice (no pywinauto)
++    pip install -e "${JARVIS_DIR}[voice]" -q || \
+         warn "Some packages failed to install (non-fatal)."
+ elif [ "$OS_TYPE" = "Linux" ]; then
+-    # Linux: also skip pywinauto
+-    pip install -e "${JARVIS_DIR}" -q || \
++    # Linux: core + voice (no pywinauto)
++    pip install -e "${JARVIS_DIR}[voice]" -q || \
+         warn "Some packages failed to install (non-fatal)."
+ else
+-    # Windows (Git Bash / WSL): include pywinauto
+-    pip install -e "${JARVIS_DIR}[windows]" -q || \
++    # Windows: core + voice + windows (pywinauto)
++    pip install -e "${JARVIS_DIR}[full]" -q || \
+         warn "Some packages failed to install (non-fatal)."
+ fi
+ 
++# If RealtimeSTT failed (PyTorch too heavy), install core only
++if ! python -c "import RealtimeSTT" 2>/dev/null; then
++    warn "RealtimeSTT not available — installing core only."
++    warn "Voice input needs RealtimeSTT. Text mode (--text-mode) still works."
++    pip install -e "${JARVIS_DIR}" -q 2>/dev/null || true
++fi
++
+ # --- Playwright -------------------------------------------------------------
+ info "Installing Playwright Chromium ..."
+ python -m playwright install chromium || warn "Playwright install failed (non-fatal for STT/TTS)."
+diff --git a/pyproject.toml b/pyproject.toml
+index 02b6a54..3bc4431 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -1,10 +1,10 @@
+ [build-system]
+-requires = ["setuptools>=68.0"]
+-build-backend = "setuptools.backends._legacy:_Backend"
++requires = ["setuptools>=68.0", "wheel"]
++build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "jarvis-assistant"
+-version = "0.3.0"
++version = "0.3.1"
+ description = "JARVIS — Voice-controlled AI assistant inspired by Iron Man"
+ readme = "README.md"
+ license = {text = "MIT"}
+@@ -13,9 +13,7 @@ authors = [{name = "JARVIS Project"}]
+ 
+ dependencies = [
+     "faster-whisper>=1.2.0",
+-    "RealtimeSTT>=1.0.0",
+     "edge-tts>=7.0.0",
+-    "sounddevice>=0.4.0",
+     "openai>=1.0.0",
+     "python-dotenv>=1.0.0",
+     "pyautogui>=0.9.54",
+@@ -27,7 +25,20 @@ dependencies = [
+ ]
+ 
+ [project.optional-dependencies]
+-windows = ["pywinauto>=0.6.9"]
++voice = [
++    "RealtimeSTT>=1.0.0",
++    "sounddevice>=0.4.0",
++]
++windows = [
++    "pywinauto>=0.6.9",
++    "sounddevice>=0.4.0",
++    "RealtimeSTT>=1.0.0",
++]
++full = [
++    "RealtimeSTT>=1.0.0",
++    "sounddevice>=0.4.0",
++    "pywinauto>=0.6.9",
++]
+ 
+ [project.scripts]
+ jarvis = "jarvis.main:main"
+diff --git a/requirements.txt b/requirements.txt
+index 79c36a2..6ab49de 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,13 +1,19 @@
++# Core dependencies (lightweight, no PyTorch)
+ faster-whisper>=1.2.0
+-RealtimeSTT>=1.0.0
+ edge-tts>=7.0.0
+-sounddevice>=0.4.0
+ openai>=1.0.0
+ python-dotenv>=1.0.0
+ pyautogui>=0.9.54
+-pywinauto>=0.6.9
+ playwright>=1.60.0
+ pyyaml>=6.0
+ numpy>=1.24.0
+ ddgs>=9.0.0
+-httpx>=0.25.0
+\ No newline at end of file
++httpx>=0.25.0
++
++# Voice (optional — requires PyTorch ~5GB)
++# Install separately: pip install -e .[voice]
++RealtimeSTT>=1.0.0
++sounddevice>=0.4.0
++
++# Windows only
++# pywinauto>=0.6.9
+\ No newline at end of file
