@@ -82,13 +82,31 @@ def test_index_and_health(make_client):
 def test_auth_required_for_api_and_websocket(make_client):
     client, _, _ = make_client(token="secret")
     assert client.post("/api/auth").status_code == 401
-    assert client.post("/api/auth", headers={"Authorization": "Bearer secret"}).status_code == 200
-    assert client.get("/api/tts?text=hi&token=wrong").status_code == 401
+    assert client.get("/api/tts?text=hi").status_code == 401
+    # The token in a URL is no longer accepted (it would end up in access logs).
+    assert client.get("/api/tts?text=hi&token=secret").status_code == 401
     with pytest.raises(Exception):
-        with client.websocket_connect("/ws?token=wrong") as ws:
+        with client.websocket_connect("/ws?token=secret") as ws:
             ws.receive_json()
-    with client.websocket_connect("/ws?token=secret") as ws:
+    # Logging in sets an HttpOnly session cookie that is not the token itself.
+    r = client.post("/api/auth", headers={"Authorization": "Bearer secret"})
+    assert r.status_code == 200
+    cookie = r.headers["set-cookie"]
+    assert "jarvis_session=" in cookie and "HttpOnly" in cookie and "secret" not in cookie
+    assert client.post("/api/auth").status_code == 200
+    with client.websocket_connect("/ws") as ws:
         assert ws.receive_json()["type"] == "hello"
+    client.post("/api/logout")
+    assert client.post("/api/auth").status_code == 401
+
+
+def test_wrong_password_attempts_are_limited(make_client):
+    client, _, _ = make_client(token="secret")
+    bad = {"Authorization": "Bearer nope"}
+    codes = [client.post("/api/auth", headers=bad).status_code for _ in range(9)]
+    assert codes[:8] == [401] * 8 and codes[8] == 429
+    # Even the right password is refused while locked out.
+    assert client.post("/api/auth", headers={"Authorization": "Bearer secret"}).status_code == 429
 
 
 def test_chat_uses_cloud_tools_and_persists_history(make_client):

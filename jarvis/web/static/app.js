@@ -31,11 +31,9 @@ const store = {
   },
 };
 
-let token = store.get("token", "");
 let health = {};
 const settings = { engine: store.get("engine", "auto"), tts: store.get("tts", "server") };
 
-function authHeaders() { return token ? { Authorization: "Bearer " + token } : {}; }
 
 function showBanner(text) {
   const b = $("banner");
@@ -217,7 +215,7 @@ class ServerRecognizer {
       this.onInterim("…กำลังถอดเสียง");
       try {
         const r = await fetch(`/api/transcribe?lang=${encodeURIComponent(lang)}`, {
-          method: "POST", headers: { ...authHeaders(), "Content-Type": blob.type }, body: blob,
+          method: "POST", headers: { "Content-Type": blob.type }, body: blob,
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.detail || r.statusText);
@@ -330,7 +328,6 @@ const speaker = {
   _server({ text, langCode }) {
     const params = new URLSearchParams({ text });
     if (langCode && LANG[langCode]) params.set("voice", LANG[langCode].voice);
-    if (token) params.set("token", token);
     return new Promise((resolve, reject) => {
       const a = this.audio;
       a.onended = resolve;
@@ -364,7 +361,7 @@ const conn = {
 
   connect() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${location.host}/ws` + (token ? `?token=${encodeURIComponent(token)}` : "");
+    const url = `${proto}//${location.host}/ws`;
     const sock = new WebSocket(url);
     this.sock = sock;
     sock.onopen = () => {
@@ -915,7 +912,10 @@ function updateEngineNote() {
 $("open-settings").addEventListener("click", () => { updateEngineNote(); $("settings").showModal(); });
 $("set-engine").addEventListener("change", (e) => { settings.engine = e.target.value; store.set("engine", settings.engine); updateEngineNote(); });
 $("set-tts").addEventListener("change", (e) => { settings.tts = e.target.value; store.set("tts", settings.tts); });
-$("logout").addEventListener("click", () => { store.set("token", ""); location.reload(); });
+$("logout").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" }).catch(() => {});
+  location.reload();
+});
 
 function showLogin(error) {
   $("app").hidden = true;
@@ -929,9 +929,9 @@ $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const candidate = $("login-token").value.trim();
   const r = await fetch("/api/auth", { method: "POST", headers: { Authorization: "Bearer " + candidate } });
+  if (r.status === 429) { showLogin("ใส่รหัสผิดหลายครั้งเกินไป — รอ 15 นาที"); return; }
   if (!r.ok) { showLogin("รหัสไม่ถูกต้อง"); return; }
-  token = candidate;
-  store.set("token", token);
+  $("login-token").value = "";
   startApp();
 });
 
@@ -960,7 +960,13 @@ async function boot() {
 
   try { health = await (await fetch("/api/health")).json(); } catch { health = {}; }
   if (health.auth_required) {
-    const ok = token && (await fetch("/api/auth", { method: "POST", headers: authHeaders() })).ok;
+    // Older versions kept the password in localStorage; trade it for a cookie once.
+    const legacy = store.get("token", "");
+    if (legacy) {
+      try { localStorage.removeItem("jarvis_token"); } catch { /* ignore */ }
+      await fetch("/api/auth", { method: "POST", headers: { Authorization: "Bearer " + legacy } }).catch(() => {});
+    }
+    const ok = (await fetch("/api/auth", { method: "POST" }).catch(() => ({ ok: false }))).ok;
     if (!ok) { showLogin(); return; }
   }
   startApp();

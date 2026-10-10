@@ -19,12 +19,15 @@ Run with ``jarvis --web`` (or ``python -m jarvis.web``).
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 import secrets
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -68,6 +71,11 @@ MAX_TEXT_CHARS = 4_000
 MAX_TTS_CHARS = 1_500
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 WEB_SESSION_ID = "web"
+SESSION_COOKIE = "jarvis_session"
+SESSION_MAX_AGE = 180 * 24 * 3600
+# Wrong-password attempts allowed per IP within FAILURE_WINDOW seconds.
+MAX_FAILURES = 8
+FAILURE_WINDOW = 15 * 60
 
 
 # --------------------------------------------------------------------------- #
@@ -372,6 +380,13 @@ def _dispatch_cloud_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
 def _clip(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
     return str(value or "").strip()[:limit]
 
@@ -419,6 +434,7 @@ class JarvisServer:
         )
         self.store = store or SessionStore()
         self.whisper = WhisperTranscriber(settings.whisper_model)
+        self._failures: Dict[str, List[float]] = {}
 
     def save_message(self, role: str, content: str) -> None:
         try:
@@ -432,11 +448,37 @@ class JarvisServer:
             return True
         return bool(token) and secrets.compare_digest(token, expected)
 
-    def _check(self, request: Request) -> None:
+    def session_value(self) -> str:
+        """Cookie value proving a successful login.
+
+        Derived from the access token, so the token itself is never stored
+        in the browser, and changing the token logs every device out.
+        """
+        key = (self.settings.access_token or "").encode()
+        return hmac.new(key, b"jarvis-session-v1", hashlib.sha256).hexdigest()
+
+    def session_ok(self, cookies: Dict[str, str]) -> bool:
+        if not self.settings.access_token:
+            return True
+        value = cookies.get(SESSION_COOKIE, "")
+        return bool(value) and secrets.compare_digest(value, self.session_value())
+
+    def _bearer(self, request: Request) -> Optional[str]:
         auth = request.headers.get("authorization", "")
-        token = auth[7:] if auth.lower().startswith("bearer ") else request.query_params.get("token")
-        if not self.authorized(token):
+        return auth[7:] if auth.lower().startswith("bearer ") else None
+
+    def _check(self, request: Request) -> None:
+        if self.session_ok(request.cookies):
+            return
+        token = self._bearer(request)
+        if token is None or not self.authorized(token):
             raise HTTPException(status_code=401, detail="Invalid access token")
+
+    def _too_many_failures(self, ip: str) -> bool:
+        now = time.monotonic()
+        recent = [t for t in self._failures.get(ip, []) if now - t < FAILURE_WINDOW]
+        self._failures[ip] = recent
+        return len(recent) >= MAX_FAILURES
 
     def build(self) -> FastAPI:
         app = FastAPI(title="JARVIS", docs_url=None, redoc_url=None)
@@ -462,9 +504,30 @@ class JarvisServer:
             }
 
         @app.post("/api/auth")
-        async def auth(request: Request) -> Dict[str, Any]:
-            self._check(request)
-            return {"ok": True}
+        async def auth(request: Request) -> Response:
+            """Log in with ``Authorization: Bearer <token>``, or check the cookie."""
+            if self.session_ok(request.cookies) and self._bearer(request) is None:
+                return JSONResponse({"ok": True})
+            ip = _client_ip(request)
+            if self._too_many_failures(ip):
+                raise HTTPException(status_code=429, detail="Too many attempts — try again later")
+            if not self.authorized(self._bearer(request)):
+                self._failures.setdefault(ip, []).append(time.monotonic())
+                raise HTTPException(status_code=401, detail="Invalid access token")
+            response = JSONResponse({"ok": True})
+            if self.settings.access_token:
+                secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+                response.set_cookie(
+                    SESSION_COOKIE, self.session_value(), max_age=SESSION_MAX_AGE,
+                    httponly=True, secure=secure, samesite="strict",
+                )
+            return response
+
+        @app.post("/api/logout")
+        async def logout() -> Response:
+            response = JSONResponse({"ok": True})
+            response.delete_cookie(SESSION_COOKIE)
+            return response
 
         @app.get("/api/tts")
         async def tts(request: Request, text: str, voice: Optional[str] = None) -> Response:
@@ -505,7 +568,7 @@ class JarvisServer:
 
         @app.websocket("/ws")
         async def ws_endpoint(ws: WebSocket) -> None:
-            if not self.authorized(ws.query_params.get("token")):
+            if not self.session_ok(ws.cookies):
                 await ws.close(code=4401)
                 return
             await ws.accept()
