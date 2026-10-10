@@ -3,6 +3,6 @@
 Provides speech synthesis using Microsoft Edge TTS (free, no API key).
 """
 
-from jarvis.tts.speaker import TTSSpeaker
+from jarvis.tts.speaker import TTSSpeaker, detect_language, pick_voice
 
-__all__ = ["TTSSpeaker"]
+__all__ = ["TTSSpeaker", "detect_language", "pick_voice"]

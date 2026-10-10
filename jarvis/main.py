@@ -34,11 +34,11 @@ import yaml  # type: ignore
 
 from jarvis.stt import STTListener
 from jarvis.tts import TTSSpeaker
-from jarvis.utils import list_input_devices, get_default_input_device
+from jarvis.utils import get_default_input_device
 from jarvis.brain import LLMClient, JARVIS_PROMPT, ALL_TOOLS, ConversationHistory
-from jarvis.brain.tools import register_handlers, dispatch_tool
+from jarvis.brain.tools import register_handlers
 from jarvis.actions.registry import ACTION_REGISTRY, execute_action
-from jarvis.actions.memory import MEMORY_FILE
+from jarvis.actions.memory import inject_memory_context, load_memory_text
 from jarvis.security import InjectionScanner
 from jarvis.sessions import SessionStore
 from jarvis.digest import morning_briefing
@@ -98,6 +98,7 @@ class JarvisApp:
             voice=tts_cfg.get("voice", "th-TH-PremwadeeNeural"),
             rate=int(tts_cfg.get("rate", 0)),
             volume=int(tts_cfg.get("volume", 0)),
+            auto_voice=bool(tts_cfg.get("auto_voice", True)),
         )
 
         # --- STT listener ---
@@ -166,46 +167,13 @@ class JarvisApp:
     # Transcript handler — the brain of JARVIS
     # ------------------------------------------------------------------ #
     def _load_memory(self) -> str:
-        """Read persistent memory and return it as a context string.
-
-        Returns an empty string if there is no memory file or it is empty
-        so that callers can simply prepend the result to the system prompt.
-        """
-        try:
-            if MEMORY_FILE.exists():
-                text = MEMORY_FILE.read_text(encoding="utf-8").strip()
-                if text:
-                    return text
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Could not load memory file %s: %s", MEMORY_FILE, exc)
-        return ""
+        """Read persistent memory and return it as a context string."""
+        return load_memory_text()
 
     @staticmethod
     def _inject_memory_context(messages: list, memory_text: str) -> list:
-        """Return a copy of *messages* with persistent memory injected.
-
-        The memory is appended to the system prompt (the first message
-        with ``role == "system"``) so the model sees it as additional
-        context rather than a user turn.
-        """
-        if not memory_text:
-            return messages
-        memory_block = (
-            "\n# Persistent Memory\n"
-            "The following facts and preferences have been remembered "
-            "across sessions. Use them to personalise responses but do not "
-            "mention the memory file itself to the user.\n\n"
-            f"{memory_text}\n"
-        )
-        updated = []
-        for msg in messages:
-            if msg.get("role") == "system" and "content" in msg:
-                new_msg = dict(msg)
-                new_msg["content"] = msg["content"] + memory_block
-                updated.append(new_msg)
-            else:
-                updated.append(msg)
-        return updated
+        """Return a copy of *messages* with persistent memory injected."""
+        return inject_memory_context(messages, memory_text)
 
     def _on_transcript(self, text: str) -> None:
         """Handle a recognised command: send to LLM, execute tools, speak."""
@@ -475,6 +443,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Start a fresh session (don't load old messages)")
     p.add_argument("--sessions", action="store_true",
                    help="List all stored sessions and exit")
+    p.add_argument("--web", action="store_true",
+                   help="Run the cloud web app (open it from any browser)")
+    p.add_argument("--host", default="0.0.0.0",
+                   help="Web server host (with --web)")
+    p.add_argument("--port", type=int, default=None,
+                   help="Web server port (with --web; default $PORT or 8000)")
     return p
 
 
@@ -514,6 +488,17 @@ def main(argv: Optional[list] = None) -> int:
                     f"  {s['id']:<20} created={s['created_at']} "
                     f"updated={s['updated_at']}"
                 )
+        return 0
+
+    if args.web:
+        try:
+            from jarvis.web import run as run_web
+        except ImportError as exc:
+            print(f"Web dependencies missing ({exc}). Run: pip install -e '.[web]'")
+            return 1
+        if args.llm_model:
+            os.environ["JARVIS_LLM_MODEL"] = args.llm_model
+        run_web(config, host=args.host, port=args.port)
         return 0
 
     app = JarvisApp(

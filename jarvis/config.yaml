@@ -16,6 +16,7 @@ tts:
   #          de-DE-KatjaNeural (female), de-DE-ConradNeural (male)
   rate: 0                    # 0 = normal, +50 = faster, -20 = slower
   volume: 0                  # 0 = normal, +100 = max, -50 = quieter
+  auto_voice: true           # switch voice to match the reply's language
 
 automation:
   browser: playwright

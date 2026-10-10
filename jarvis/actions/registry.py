@@ -109,7 +109,7 @@ def execute_action(name: str, args: dict | None = None) -> dict:
     handler = ACTION_REGISTRY.get(name)
     if handler is None:
         return {"success": False, "error": f"Unknown action: {name}"}
-    if args is None:
+    if not isinstance(args, dict):
         args = {}
     try:
         return handler(**args)

@@ -205,10 +205,15 @@ class LLMClient:
                 "role": "assistant",
                 "content": parsed.get("content", "") or "",
             }
+            # Some OpenAI-compatible servers omit tool-call ids; assign one
+            # so the assistant message and the tool results stay paired.
+            for i, tc in enumerate(tool_calls):
+                if not tc.get("id"):
+                    tc["id"] = f"call_{iteration}_{i}"
             # Re-serialize tool calls for OpenAI format.
             assistant_msg["tool_calls"] = [
                 {
-                    "id": tc.get("id", f"call_{iteration}_{i}"),
+                    "id": tc["id"],
                     "type": "function",
                     "function": {
                         "name": tc["function"]["name"],
@@ -218,7 +223,7 @@ class LLMClient:
                         ),
                     },
                 }
-                for i, tc in enumerate(tool_calls)
+                for tc in tool_calls
             ]
             working_messages.append(assistant_msg)
 
@@ -241,10 +246,9 @@ class LLMClient:
 
                 # Feed the result back to the LLM as a tool message.
                 result_str = json.dumps(result, ensure_ascii=False, default=str)
-                tool_msg_id = tc.get("id", f"call_{iteration}_{name}")
                 working_messages.append({
                     "role": "tool",
-                    "tool_call_id": tool_msg_id,
+                    "tool_call_id": tc["id"],
                     "content": result_str,
                 })
 
@@ -352,8 +356,10 @@ class LLMClient:
                 for tc in msg.tool_calls:
                     name = tc.function.name
                     try:
-                        arguments = json.loads(tc.function.arguments)
+                        arguments = json.loads(tc.function.arguments or "{}")
                     except (json.JSONDecodeError, TypeError):
+                        arguments = {}
+                    if not isinstance(arguments, dict):
                         arguments = {}
                     tool_calls.append({
                         "id": tc.id,

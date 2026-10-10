@@ -9,8 +9,14 @@ This package contains the AI brain of JARVIS:
 """
 
 from .llm import LLMClient
-from .prompts import JARVIS_PROMPT
+from .prompts import JARVIS_PROMPT, JARVIS_WEB_PROMPT
 from .tools import ALL_TOOLS
 from .conversation import ConversationHistory
 
-__all__ = ["LLMClient", "JARVIS_PROMPT", "ALL_TOOLS", "ConversationHistory"]
+__all__ = [
+    "LLMClient",
+    "JARVIS_PROMPT",
+    "JARVIS_WEB_PROMPT",
+    "ALL_TOOLS",
+    "ConversationHistory",
+]

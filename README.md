@@ -14,8 +14,69 @@ Say **"Jarvis, open YouTube"** — and it opens Chrome, navigates to YouTube, an
 - 🌍 **Multilingual** — Thai 🇹🇭, English 🇺🇸, German 🇩🇪
 - 💬 **Conversation memory** — remembers previous commands
 - ❓ **Ask for clarification** — if command is ambiguous, asks you back
+- ☁️ **Cloud web app** — use JARVIS from any phone/browser: assistant, real-time translation, live lecture notes & summaries
 
-## Quick Install
+## ☁️ JARVIS on the Cloud (ใช้งานผ่านมือถือ/เบราว์เซอร์ ไม่ต้องรันบนเครื่องตัวเอง)
+
+รัน JARVIS บนเซิร์ฟเวอร์ แล้วเปิดใช้จากมือถือหรือโน้ตบุ๊กเครื่องไหนก็ได้ผ่านเบราว์เซอร์
+(กด "Add to Home Screen" จะได้ไอคอนเหมือนแอป)
+
+| แท็บ | ทำอะไร |
+|------|--------|
+| **ผู้ช่วย** | คุยด้วยเสียงหรือพิมพ์ — ค้นเว็บ, ข่าว, อากาศ, เวลา, จำสิ่งที่คุณบอก. โหมด Hands-free: พูด "Jarvis …" ได้เลย |
+| **แปลสด** | พูดแล้วคำแปลขึ้นทันทีทีละประโยค (8 ภาษา: ไทย/อังกฤษ/เยอรมัน/ญี่ปุ่น/จีน/เกาหลี/ฝรั่งเศส/สเปน) อ่านออกเสียงได้ |
+| **สรุปเลคเชอร์** | ถอดเสียงอาจารย์แบบ real-time, โน้ตอัปเดตเองระหว่างสอน, แปลซับได้, กด "สรุปเลคเชอร์" ได้สรุป + คำถามทบทวน, ถามคำถามเกี่ยวกับเลคเชอร์ได้, ดาวน์โหลดเป็น .md |
+
+### Deploy ฟรีบน Render (แนะนำ)
+
+1. สมัคร https://render.com แล้วเชื่อม GitHub
+2. **New → Blueprint** → เลือก repo นี้ (Render อ่าน `render.yaml` ให้เอง)
+3. ใส่ค่า 2 ตัว:
+   - `OLLAMA_API_KEY` — key ของ Ollama Cloud
+   - `JARVIS_ACCESS_TOKEN` — รหัสผ่านสำหรับเข้าเว็บ (ตั้งเองให้เดายาก) ⚠️ ถ้าไม่ตั้ง ใครเจอ URL ก็ใช้โควต้า AI ของคุณได้
+4. รอ deploy เสร็จ → เปิด `https://<ชื่อ>.onrender.com` บนมือถือ → ใส่รหัส → ใช้งานได้เลย
+
+> Render แพ็กเกจฟรีจะ "หลับ" เมื่อไม่มีคนใช้ 15 นาที — เปิดครั้งแรกรอ ~1 นาที. ถ้าต้องการให้ตื่นตลอดใช้แพ็กเกจ Starter
+> หรือ deploy ที่อื่นที่รัน Docker ได้ (Fly.io, Railway, Google Cloud Run, VPS)
+
+### รันด้วย Docker (ที่ไหนก็ได้)
+
+```bash
+docker build -t jarvis .
+docker run -p 8000:8000 -e OLLAMA_API_KEY=... -e JARVIS_ACCESS_TOKEN=... -v jarvis-data:/data jarvis
+```
+
+### ทดสอบบนเครื่อง
+
+```bash
+pip install -e '.[web]'
+jarvis --web            # เปิด http://localhost:8000
+```
+
+### ตั้งค่า (environment variables)
+
+| ตัวแปร | ค่าเริ่มต้น | ความหมาย |
+|--------|-----------|----------|
+| `OLLAMA_API_KEY` | — | API key ของ LLM (จำเป็น) |
+| `JARVIS_ACCESS_TOKEN` | — | รหัสผ่านเข้าเว็บ (ควรตั้ง) |
+| `JARVIS_LLM_MODEL` | `glm-5.2` | โมเดลหลัก (แชท, โน้ต, สรุป) |
+| `JARVIS_FAST_MODEL` | = โมเดลหลัก | โมเดลสำหรับแปลสด — ใส่โมเดลที่เร็วจะ real-time ขึ้น |
+| `OLLAMA_BASE_URL` | `https://ollama.com/v1` | endpoint แบบ OpenAI-compatible ตัวไหนก็ได้ |
+| `JARVIS_TIMEZONE` | `Asia/Bangkok` (ใน Docker) | เขตเวลาที่ใช้ตอบ "กี่โมงแล้ว" |
+| `JARVIS_TTS_VOICE` | `th-TH-PremwadeeNeural` | เสียงพูดตอบ (เปลี่ยนภาษาให้อัตโนมัติตามคำตอบ) |
+| `JARVIS_DATA_DIR` | `~/.jarvis` | ที่เก็บความจำและประวัติแชท |
+
+### เรื่องที่ควรรู้
+
+- **การฟังเสียง** ใช้ระบบในเบราว์เซอร์ (Chrome / Edge / Safari) — เร็วและ real-time ที่สุด.
+  Firefox ไม่มีระบบนี้ → build Docker ด้วย `--build-arg WITH_WHISPER=1` เพื่อใช้ Whisper บนเซิร์ฟเวอร์ (ต้องการ RAM ~1GB)
+- **ไมโครโฟนต้องใช้ HTTPS** — Render/Fly ให้ HTTPS อัตโนมัติ
+- **เลคเชอร์ถูกบันทึกในเบราว์เซอร์ของคุณ** (เมนู 📚) และดาวน์โหลดเป็นไฟล์ได้ — ล้างข้อมูลเบราว์เซอร์แล้วจะหาย
+- ระหว่างบันทึกเลคเชอร์ หน้าจอจะไม่ดับเอง; ถ้าล็อกจอ เบราว์เซอร์มือถือจะหยุดฟัง
+- เปิด "อ่านคำแปลออกเสียง" ควรใช้หูฟัง ไม่งั้นไมค์จะได้ยินเสียงคำแปลเอง
+- **การคุมคอมพิวเตอร์** (เปิดแอป, คลิก, พิมพ์, มองจอ) ทำได้เฉพาะ JARVIS ที่รันบนเครื่องตัวเอง (`jarvis`) — เซิร์ฟเวอร์บนคลาวด์มองไม่เห็นหน้าจอของคุณ
+
+## Quick Install (desktop — คุมคอมพิวเตอร์ได้)
 
 ### macOS
 
@@ -134,6 +195,7 @@ jarvis --llm-model minimax-m3   # use a different LLM
 jarvis --text-mode          # text-only mode (no mic needed)
 jarvis --verbose            # debug logging
 jarvis --list-audio         # show audio devices
+jarvis --web                # cloud web app on http://localhost:8000
 ```
 
 Say **"Jarvis"** then your command:
@@ -220,6 +282,10 @@ Jarvis/
     │   ├── desktop.py           # pyautogui desktop control
     │   ├── system.py            # System commands + weather + time
     │   └── registry.py          # Action dispatch registry
+    ├── web/                     # Cloud web app (FastAPI + browser UI)
+    │   ├── server.py            # HTTP/WebSocket API, auth, TTS, Whisper
+    │   ├── ai.py                # Streaming translation / notes / summaries
+    │   └── static/              # index.html, app.js, app.css
     └── utils/audio.py           # Audio device helpers
 ```
 
@@ -256,6 +322,13 @@ Browser Auto    Desktop Auto
 | API error | Check `OLLAMA_API_KEY` is set in `.env` or environment |
 | Browser doesn't open | Run `playwright install chromium` |
 | Desktop automation fails on Linux | Needs X11 display — use on Windows or Linux with desktop |
+
+## Development
+
+```bash
+pip install -e '.[web]' pytest
+python -m pytest tests
+```
 
 ## License
 
