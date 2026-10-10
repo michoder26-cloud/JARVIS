@@ -38,6 +38,7 @@ from jarvis.actions.news import get_news
 from jarvis.actions.search import search_web_api
 from jarvis.actions.system import get_time, get_weather
 from jarvis.brain import ConversationHistory, JARVIS_WEB_PROMPT, LLMClient
+from jarvis.brain.providers import check_models, resolve_llm
 from jarvis.brain.tools import GET_NEWS, GET_TIME, GET_WEATHER, MEMORY_MANAGE, SEARCH_WEB, THINK
 from jarvis.sessions import SessionStore
 from jarvis.tts.speaker import TTSSpeaker
@@ -76,25 +77,29 @@ WEB_SESSION_ID = "web"
 class Settings:
     """Server settings, read from config.yaml and environment variables."""
 
-    llm_model: str = "glm-5.2"
+    llm_model: str = "gemini-3.8-flash"
     fast_model: Optional[str] = None
-    base_url: str = "https://ollama.com/v1"
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key: Optional[str] = None
+    provider: str = "gemini"
+    key_env: str = "GEMINI_API_KEY"
     access_token: Optional[str] = None
     tts_voice: str = "th-TH-PremwadeeNeural"
     whisper_model: str = "base"
 
     @classmethod
     def from_config(cls, config: Optional[dict] = None) -> "Settings":
-        llm = (config or {}).get("llm", {})
+        llm = check_models(resolve_llm(config))
         tts = (config or {}).get("tts", {})
         stt = (config or {}).get("stt", {})
         env = os.environ.get
         return cls(
-            llm_model=env("JARVIS_LLM_MODEL") or llm.get("model", "glm-5.2"),
-            fast_model=env("JARVIS_FAST_MODEL") or llm.get("fast_model"),
-            base_url=env("OLLAMA_BASE_URL") or llm.get("base_url", "https://ollama.com/v1"),
-            api_key=env("OLLAMA_API_KEY"),
+            llm_model=llm.model,
+            fast_model=llm.fast_model,
+            base_url=llm.base_url,
+            api_key=llm.api_key,
+            provider=llm.provider,
+            key_env=llm.key_env,
             access_token=env("JARVIS_ACCESS_TOKEN") or None,
             tts_voice=env("JARVIS_TTS_VOICE") or tts.get("voice", "th-TH-PremwadeeNeural"),
             whisper_model=env("JARVIS_WHISPER_MODEL") or stt.get("model", "base"),
@@ -373,8 +378,12 @@ def _clip(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
 
 def _friendly_error(exc: Exception) -> str:
     msg = str(exc).lower()
-    if "401" in msg or "unauthorized" in msg or "api key" in msg:
-        return "AI API key is missing or invalid (set OLLAMA_API_KEY on the server)."
+    if any(x in msg for x in ("401", "403", "unauthorized", "api key", "permission")):
+        return "AI API key is missing or invalid — check the key set on the server."
+    if "429" in msg or "quota" in msg or "rate limit" in msg:
+        return "AI rate limit reached (free tier). Wait a minute and try again."
+    if "404" in msg or "not found" in msg:
+        return "AI model not found — set JARVIS_LLM_MODEL to a model your provider offers."
     if "timeout" in msg or "timed out" in msg:
         return "The AI took too long to answer. Please try again."
     if "connect" in msg:
@@ -446,6 +455,8 @@ class JarvisServer:
                 "ok": True,
                 "llm_configured": self.ai.configured,
                 "model": self.settings.llm_model,
+                "provider": self.settings.provider,
+                "key_env": self.settings.key_env,
                 "auth_required": bool(self.settings.access_token),
                 "server_stt": WhisperTranscriber.available(),
             }
@@ -502,6 +513,7 @@ class JarvisServer:
             await conn.send({
                 "type": "hello",
                 "llm_configured": self.ai.configured,
+                "key_env": self.settings.key_env,
                 "history": conn.history.messages[-20:],
             })
             try:
@@ -532,7 +544,8 @@ def create_app(config: Optional[dict] = None, **kwargs: Any) -> FastAPI:
             "your AI quota. Set it before deploying publicly."
         )
     if not settings.api_key:
-        logger.warning("OLLAMA_API_KEY is not set — AI features will fail.")
+        logger.warning("%s is not set — AI features will fail.", settings.key_env)
+    logger.info("AI provider: %s, model: %s", settings.provider, settings.llm_model)
     return JarvisServer(settings, **kwargs).build()
 
 

@@ -1,6 +1,6 @@
 # JARVIS cloud web app.
 #   docker build -t jarvis .
-#   docker run -p 8000:8000 -e OLLAMA_API_KEY=... -e JARVIS_ACCESS_TOKEN=... jarvis
+#   docker run -p 8000:8000 -e GEMINI_API_KEY=... -e JARVIS_ACCESS_TOKEN=... jarvis
 # Build with --build-arg WITH_WHISPER=1 to add server-side speech recognition
 # (needs ~1 GB RAM; browsers with built-in speech recognition don't need it).
 FROM python:3.12-slim

@@ -1,14 +1,13 @@
 """Async LLM helpers for the cloud web app.
 
 Streaming translation, live lecture notes, lecture summaries and Q&A, built
-on the same OpenAI-compatible endpoint the desktop assistant uses (Ollama
-Cloud by default).
+on the same OpenAI-compatible endpoint the desktop assistant uses (Gemini,
+Groq, OpenAI or Ollama — see :mod:`jarvis.brain.providers`).
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import AsyncIterator, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
@@ -87,6 +86,8 @@ give a short general answer clearly marked as not from the lecture.
 class AIService:
     """Thin async wrapper around an OpenAI-compatible chat endpoint.
 
+    Works with any provider in :mod:`jarvis.brain.providers`.
+
     Parameters
     ----------
     model : str
@@ -107,7 +108,7 @@ class AIService:
         self.model = model
         self.fast_model = fast_model or model
         self.base_url = base_url
-        self._api_key = api_key or os.environ.get("OLLAMA_API_KEY")
+        self._api_key = api_key
         self._timeout = timeout
         self._client = None
 

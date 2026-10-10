@@ -1,5 +1,6 @@
 # One-click deploy on Render: https://render.com/deploy
-# You will be asked for OLLAMA_API_KEY and JARVIS_ACCESS_TOKEN (your login password).
+# You will be asked for GEMINI_API_KEY (free: https://aistudio.google.com/apikey)
+# and JARVIS_ACCESS_TOKEN (the password for your JARVIS site).
 services:
   - type: web
     name: jarvis
@@ -7,7 +8,7 @@ services:
     plan: free
     healthCheckPath: /api/health
     envVars:
-      - key: OLLAMA_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
       - key: JARVIS_ACCESS_TOKEN
         sync: false

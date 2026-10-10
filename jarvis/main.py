@@ -36,6 +36,7 @@ from jarvis.stt import STTListener
 from jarvis.tts import TTSSpeaker
 from jarvis.utils import get_default_input_device
 from jarvis.brain import LLMClient, JARVIS_PROMPT, ALL_TOOLS, ConversationHistory
+from jarvis.brain.providers import resolve_llm
 from jarvis.brain.tools import register_handlers
 from jarvis.actions.registry import ACTION_REGISTRY, execute_action
 from jarvis.actions.memory import inject_memory_context, load_memory_text
@@ -88,7 +89,6 @@ class JarvisApp:
         self.config = config
         stt_cfg = config.get("stt", {})
         tts_cfg = config.get("tts", {})
-        llm_cfg = config.get("llm", {})
 
         language = lang_override or stt_cfg.get("language", "auto")
         stt_model = model_override or stt_cfg.get("model", "base")
@@ -111,11 +111,16 @@ class JarvisApp:
         )
 
         # --- LLM brain ---
-        llm_model = llm_cfg.get("model", "glm-5.2")
-        llm_base_url = llm_cfg.get("base_url", "https://ollama.com/v1")
+        llm_settings = resolve_llm(config)
+        if not llm_settings.api_key:
+            logger.warning(
+                "No AI API key found — set %s (provider: %s).",
+                llm_settings.key_env, llm_settings.provider,
+            )
         self.llm = LLMClient(
-            model=llm_model,
-            base_url=llm_base_url,
+            model=llm_settings.model,
+            base_url=llm_settings.base_url,
+            api_key=llm_settings.api_key,
         )
 
         # --- Conversation history ---
@@ -430,7 +435,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", default=None,
                    help="Override Whisper model (tiny/base/small/medium/large-v3)")
     p.add_argument("--llm-model", default=None,
-                   help="Override LLM model (e.g. glm-5.2, minimax-m3)")
+                   help="Override LLM model (e.g. gemini-3.8-flash)")
     p.add_argument("--list-audio", action="store_true",
                    help="List audio devices and exit")
     p.add_argument("--text-mode", action="store_true",
@@ -452,6 +457,16 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _load_dotenv() -> None:
+    """Load API keys from a ``.env`` file (current dir or ~/.jarvis/.env)."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv()  # ./.env — never overrides variables already set
+    load_dotenv(Path.home() / ".jarvis" / ".env")
+
+
 def setup_logging(verbose: bool, level_name: str = "INFO") -> None:
     """Configure root logging."""
     level = logging.DEBUG if verbose else getattr(
@@ -467,6 +482,7 @@ def setup_logging(verbose: bool, level_name: str = "INFO") -> None:
 def main(argv: Optional[list] = None) -> int:
     """CLI entry point. Returns an exit code."""
     args = build_parser().parse_args(argv)
+    _load_dotenv()
     config = load_config(args.config)
     setup_logging(args.verbose, config.get("logging", {}).get("level", "INFO"))
 

@@ -20,10 +20,6 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
-# Default configuration — can be overridden via env or constructor.
-DEFAULT_MODEL = os.environ.get("JARVIS_MODEL", "glm-5.2")
-DEFAULT_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "https://ollama.com/v1")
-
 # Timeouts (seconds).
 TIMEOUT_CHAT = 30
 TIMEOUT_TOOLS = 60
@@ -42,33 +38,42 @@ class LLMClient:
 
     Parameters
     ----------
-    model : str
-        Model name (default ``"glm-5.2"``).
+    model : str, optional
+        Model name. Defaults to the provider preset (see
+        :mod:`jarvis.brain.providers`).
     base_url : str, optional
-        API base URL. Defaults to ``https://ollama.com/v1`` (Ollama Cloud).
+        API base URL. Defaults to the provider preset.
     api_key : str, optional
-        API key. If not passed, reads from ``OLLAMA_API_KEY`` env var.
+        API key. Defaults to the provider's key variable, e.g.
+        ``GEMINI_API_KEY``.
     timeout : int
         Default request timeout in seconds.
 
     Examples
     --------
-    >>> client = LLMClient()  # Ollama Cloud
+    >>> client = LLMClient()  # provider from env, e.g. GEMINI_API_KEY
     >>> resp = client.chat([{"role": "user", "content": "Hello"}])
     >>> print(resp["content"])
     """
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: Optional[str] = None,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         timeout: int = TIMEOUT_CHAT,
     ) -> None:
+        if not (model and base_url and api_key):
+            from jarvis.brain.providers import resolve
+
+            defaults = resolve()
+            model = model or os.environ.get("JARVIS_MODEL") or defaults.model
+            base_url = base_url or defaults.base_url
+            api_key = api_key or defaults.api_key
         self.model = model
-        self.base_url = base_url or DEFAULT_BASE_URL
+        self.base_url = base_url
         self.timeout = timeout
-        self._api_key = api_key or os.environ.get("OLLAMA_API_KEY")
+        self._api_key = api_key
         self._client = None  # lazy
 
     # ------------------------------------------------------------------ #
@@ -87,7 +92,7 @@ class LLMClient:
 
         self._client = OpenAI(
             base_url=self.base_url,
-            api_key=self._api_key or "ollama",  # Ollama Cloud needs a key
+            api_key=self._api_key or "missing-key",
             timeout=self.timeout,
         )
         logger.debug("OpenAI client ready: base_url=%s model=%s", self.base_url, self.model)

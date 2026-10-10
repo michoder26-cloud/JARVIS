@@ -457,7 +457,7 @@ const chat = {
 };
 
 conn.on("hello", (m) => {
-  health.missingKey = m.llm_configured ? "" : "⚠ เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า OLLAMA_API_KEY — ฟีเจอร์ AI จะยังใช้ไม่ได้";
+  health.missingKey = m.llm_configured ? "" : `⚠ เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า ${m.key_env || "API key"} — ฟีเจอร์ AI จะยังใช้ไม่ได้`;
   showBanner(health.missingKey);
   if (!chat.log.querySelector(".msg") && m.history && m.history.length) {
     m.history.forEach((h) => { if (h.role === "user" || h.role === "assistant") chat.add(h.role, h.content); });
@@ -909,7 +909,7 @@ function updateEngineNote() {
   parts.push(SpeechRec ? "✓ เบราว์เซอร์นี้รองรับการฟังเสียงแบบ real-time" : "✗ เบราว์เซอร์นี้ไม่มีระบบฟังเสียงในตัว");
   parts.push(health.server_stt ? "✓ เซิร์ฟเวอร์มี Whisper" : "✗ เซิร์ฟเวอร์ไม่ได้ติดตั้ง Whisper");
   $("engine-note").textContent = parts.join(" · ");
-  $("server-info").textContent = `Model: ${health.model || "?"} · AI key: ${health.llm_configured ? "✓" : "✗ (ยังไม่ตั้ง)"}`;
+  $("server-info").textContent = `AI: ${health.provider || "?"} / ${health.model || "?"} · key: ${health.llm_configured ? "✓" : "✗ (ยังไม่ตั้ง " + (health.key_env || "") + ")"}`;
 }
 
 $("open-settings").addEventListener("click", () => { updateEngineNote(); $("settings").showModal(); });
