@@ -38,28 +38,58 @@ class FakeAI:
         return self._gen("answer to ", question)
 
 
+class FakeVisionClient:
+    """Stands in for the OpenAI client when analysing screenshots."""
+
+    def __init__(self, reply):
+        self.reply = reply
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs):
+        from types import SimpleNamespace as NS
+        return NS(choices=[NS(message=NS(content=self.reply))])
+
+
 class FakeLLM:
     def __init__(self):
         self.messages = None
+        self.tools = None
+        self.script = []  # [(tool name, args)] to call instead of get_time
+        self.vision_reply = '{"found": true, "x": 50, "y": 25}'
+
+    def _ensure_client(self):
+        return FakeVisionClient(self.vision_reply)
 
     def chat_with_tools(self, messages, tools, on_tool_call, max_iterations=5):
-        self.messages = messages
-        result = on_tool_call("get_time", {})
+        self.messages, self.tools = messages, tools
+        results = []
+        for name, args in (self.script or [("get_time", {})]):
+            result = on_tool_call(name, args)
+            results.append({"name": name, "arguments": args, "result": result})
+        last = results[-1]["result"]
         return {
-            "content": "It is " + result.get("time_24h", "?"),
-            "tool_results": [{"name": "get_time", "arguments": {}, "result": result}],
+            "content": "It is " + last.get("time_24h", "done"),
+            "tool_results": results,
         }
 
 
 @pytest.fixture
 def make_client(tmp_path):
+    clients = []
+
     def _make(token=None):
         settings = web.Settings(api_key="x", access_token=token)
         ai, llm = FakeAI(), FakeLLM()
         server = web.JarvisServer(settings, ai=ai, llm=llm, store=SessionStore(str(tmp_path / "s.db")))
-        return TestClient(server.build()), ai, llm
+        # Entering the client keeps every WebSocket on one event loop, like a real server.
+        client = TestClient(server.build()).__enter__()
+        clients.append(client)
+        return client, ai, llm
 
-    return _make
+    yield _make
+    for client in clients:
+        client.__exit__(None, None, None)
 
 
 def collect(ws, until_type, channel=None):
@@ -188,3 +218,126 @@ def test_helpers():
     chunks = _chunks(text, 300)
     assert all(len(c) <= 300 for c in chunks)
     assert " ".join(chunks).split() == text.split()
+
+
+# --------------------------------------------------------------------------- #
+# PC agent
+# --------------------------------------------------------------------------- #
+AGENT_AUTH = {"Authorization": "Bearer secret"}
+
+
+def connect_agent(client, host="my-pc"):
+    ws = client.websocket_connect("/agent", headers=AGENT_AUTH)
+    agent = ws.__enter__()
+    agent.send_json({"type": "hello", "host": host, "os": "Windows", "screen": [200, 100]})
+    return ws, agent
+
+
+def test_agent_needs_the_password(make_client):
+    client, _, _ = make_client(token="secret")
+    for headers in ({}, {"Authorization": "Bearer wrong"}):
+        with pytest.raises(Exception):
+            with client.websocket_connect("/agent", headers=headers):
+                pass
+    # A token in the URL does not count either.
+    with pytest.raises(Exception):
+        with client.websocket_connect("/agent?token=secret"):
+            pass
+
+
+def test_agent_refused_when_no_password_is_configured(make_client):
+    client, _, _ = make_client(token=None)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/agent", headers=AGENT_AUTH):
+            pass
+
+
+def test_agent_status_reaches_browsers(make_client):
+    client, _, _ = make_client(token="secret")
+    client.post("/api/auth", headers=AGENT_AUTH)  # log the browser in
+    with client.websocket_connect("/ws") as browser:
+        assert browser.receive_json()["agent"]["online"] is False
+        ctx, _agent = connect_agent(client)
+        try:
+            status = browser.receive_json()
+            assert status == {"type": "agent_status", "online": True, "host": "my-pc", "os": "Windows"}
+            assert client.get("/api/health").json()["agent"]["online"] is True
+        finally:
+            ctx.__exit__(None, None, None)
+        assert browser.receive_json()["online"] is False
+
+
+def test_chat_without_agent_has_no_computer_tools(make_client):
+    client, _, llm = make_client()
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "chat", "text": "open spotify"})
+        collect(ws, "chat_reply")
+    assert "open_app" not in [t["function"]["name"] for t in llm.tools]
+    assert "# The user's computer" not in llm.messages[0]["content"]
+
+
+def test_chat_controls_the_computer_through_the_agent(make_client):
+    client, _, llm = make_client(token="secret")
+    llm.script = [("open_app", {"app_name": "spotify"})]
+    client.post("/api/auth", headers=AGENT_AUTH)
+    ctx, agent = connect_agent(client)
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "chat", "text": "open spotify"})
+            call = agent.receive_json()
+            assert (call["type"], call["name"], call["args"]) == ("call", "open_app", {"app_name": "spotify"})
+            agent.send_json({"type": "result", "id": call["id"], "result": {"success": True}})
+            reply = collect(ws, "chat_reply")[-1]
+            assert reply["tools"] == ["open_app"] and not reply["error"]
+        names = [t["function"]["name"] for t in llm.tools]
+        assert {"open_app", "click_on", "look_at_screen", "search_web"} <= set(names)
+        assert "shutdown" not in str(llm.tools) and "restart" not in str(llm.tools)
+        assert "# The user's computer" in llm.messages[0]["content"]
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_click_on_uses_vision_and_scales_to_the_real_screen(make_client):
+    client, _, llm = make_client(token="secret")
+    llm.script = [("click_on", {"description": "the play button"})]
+    client.post("/api/auth", headers=AGENT_AUTH)
+    ctx, agent = connect_agent(client)
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "chat", "text": "press play"})
+            shot = agent.receive_json()
+            assert shot["name"] == "screenshot"
+            agent.send_json({"type": "result", "id": shot["id"], "result": {
+                "success": True, "image_b64": "AAAA", "image_width": 100, "image_height": 50,
+                "screen_width": 200, "screen_height": 100}})
+            click = agent.receive_json()
+            # Vision said (50, 25) in the 100x50 image -> (100, 50) on the 200x100 screen.
+            assert (click["name"], click["args"]) == ("click", {"x": 100, "y": 50, "clicks": 1})
+            agent.send_json({"type": "result", "id": click["id"], "result": {"success": True}})
+            assert collect(ws, "chat_reply")[-1]["tools"] == ["click_on"]
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_click_on_rejects_positions_outside_the_screen(make_client):
+    client, _, llm = make_client(token="secret")
+    llm.script = [("click_on", {"description": "x"})]
+    llm.vision_reply = '```json\n{"found": true, "x": 900, "y": 25}\n```'
+    client.post("/api/auth", headers=AGENT_AUTH)
+    ctx, agent = connect_agent(client)
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "chat", "text": "click"})
+            shot = agent.receive_json()
+            agent.send_json({"type": "result", "id": shot["id"], "result": {
+                "success": True, "image_b64": "AAAA", "image_width": 100, "image_height": 50,
+                "screen_width": 200, "screen_height": 100}})
+            reply = collect(ws, "chat_reply")[-1]
+            assert reply["tools"] == ["click_on"]
+    finally:
+        ctx.__exit__(None, None, None)
+    # No click was ever sent to the agent: nothing else is waiting for it.

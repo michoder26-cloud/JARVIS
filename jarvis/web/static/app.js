@@ -314,7 +314,7 @@ const speaker = {
 
   async _next() {
     const item = this.queue.shift();
-    if (!item) { this.busy = false; return; }
+    if (!item) { this.busy = false; this.lastEnd = Date.now(); return; }
     this.busy = true;
     try {
       if (settings.tts === "server") await this._server(item);
@@ -454,6 +454,7 @@ const chat = {
 };
 
 conn.on("hello", (m) => {
+  setAgentStatus(m.agent);
   health.missingKey = m.llm_configured ? "" : `⚠ เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า ${m.key_env || "API key"} — ฟีเจอร์ AI จะยังใช้ไม่ได้`;
   showBanner(health.missingKey);
   if (!chat.log.querySelector(".msg") && m.history && m.history.length) {
@@ -508,31 +509,52 @@ $("chat-mic").addEventListener("click", () => {
   });
 });
 
+// After JARVIS has spoken, keep listening for a follow-up for this long
+// without needing the wake word again.
+const FOLLOW_UP_MS = 20000;
+let lastExchange = 0;
+
 function startHandsFree() {
   listen("chat-handsfree", {
-    locale: LANG.th.locale,
+    locale: LANG[$("hf-lang").value].locale,
     continuous: true,
     onInterim: (t) => { $("chat-interim").textContent = t; },
     onFinal: (t) => {
       $("chat-interim").textContent = "";
       if (speaker.busy) return; // don't react to our own voice
       const m = t.match(WAKE_WORDS);
-      if (!m) return;
-      const command = t.slice(m[0].length).trim();
-      if (command) chat.send(command);
+      const inConversation = Date.now() - Math.max(lastExchange, speaker.lastEnd || 0) < FOLLOW_UP_MS;
+      if (!m && !inConversation) return;
+      const command = m ? t.slice(m[0].length).trim() : t;
+      if (command) { lastExchange = Date.now(); chat.send(command); }
       else speaker.speak("ครับ?");
     },
     onState: (on) => {
       setMicUi(on);
-      if (!on) $("handsfree").checked = false;
+      if (!on) { $("handsfree").checked = false; store.set("handsfree", false); }
     },
   });
 }
 
 $("handsfree").addEventListener("change", (e) => {
+  store.set("handsfree", e.target.checked);
   if (e.target.checked) startHandsFree();
   else if (activeOwner === "chat-handsfree") stopListening();
 });
+$("hf-lang").addEventListener("change", (e) => {
+  store.set("hf_lang", e.target.value);
+  if (activeOwner === "chat-handsfree") startHandsFree();
+});
+
+// Computer (PC agent) status.
+function setAgentStatus(a) {
+  const el = $("agent");
+  const online = !!(a && a.online);
+  el.classList.toggle("on", online);
+  el.querySelector("b").textContent = online ? (a.host || "PC") : "PC ✗";
+  el.title = online ? `คอมพิวเตอร์เชื่อมต่อแล้ว: ${a.host || ""} (${a.os || ""})` : "ยังไม่ได้เชื่อมต่อคอมพิวเตอร์ (ติดตั้ง jarvis-agent บนคอม)";
+}
+conn.on("agent_status", setAgentStatus);
 $("chat-reset").addEventListener("click", () => conn.send({ type: "chat_reset" }));
 
 // --------------------------------------------------------------------------
@@ -952,6 +974,7 @@ async function boot() {
   fillLangSelect($("tr-target"), trPrefs.target);
   fillLangSelect($("lec-lang"), "th");
   fillLangSelect($("lec-notes-lang"), "th");
+  fillLangSelect($("hf-lang"), store.get("hf_lang", "th"));
   $("set-engine").value = settings.engine;
   $("set-tts").value = settings.tts;
   selectTab(store.get("tab", "assistant"));
@@ -970,6 +993,11 @@ async function boot() {
     if (!ok) { showLogin(); return; }
   }
   startApp();
+  // Resume always-on listening after a reload (the browser remembers mic permission).
+  if (store.get("handsfree", false) && chooseEngine()) {
+    $("handsfree").checked = true;
+    startHandsFree();
+  }
 }
 
 boot();

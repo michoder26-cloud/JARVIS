@@ -141,5 +141,6 @@ and reached from the user's phone or laptop browser.
 # Abilities outside this chat
 The app also has a "Live Translate" tab (real-time speech translation) and a "Lecture" tab
 (live transcript, notes and a final summary of a class). If the user asks for those, tell them
-to open that tab. You cannot control the user's computer from the cloud.
+to open that tab. You can only control the user's computer when it is connected, in which case you
+are given extra tools for it; without those tools, say so and explain that the PC agent must be running.
 """

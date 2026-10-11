@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-assistant"
-version = "0.4.0"
+version = "0.5.0"
 description = "JARVIS — Voice-controlled AI assistant inspired by Iron Man"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,6 +25,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = [
+    "websockets>=14.0",
+    "pyautogui>=0.9.54",
+    "pyperclip>=1.8",
+    "pillow>=10.0",
+]
 web = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
@@ -48,11 +54,12 @@ full = [
 
 [project.scripts]
 jarvis = "jarvis.main:main"
+jarvis-agent = "jarvis.agent.__main__:main"
 
 [tool.setuptools]
 packages = ["jarvis", "jarvis.stt", "jarvis.tts", "jarvis.brain",
             "jarvis.actions", "jarvis.utils", "jarvis.security",
-            "jarvis.sessions", "jarvis.vision", "jarvis.web"]
+            "jarvis.sessions", "jarvis.vision", "jarvis.web", "jarvis.agent"]
 
 [tool.setuptools.package-data]
 jarvis = ["config.yaml"]

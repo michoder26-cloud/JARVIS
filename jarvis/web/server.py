@@ -46,6 +46,9 @@ from jarvis.brain.tools import GET_NEWS, GET_TIME, GET_WEATHER, MEMORY_MANAGE, S
 from jarvis.sessions import SessionStore
 from jarvis.tts.speaker import TTSSpeaker
 from jarvis.web.ai import AIService
+from jarvis.web.computer import (
+    COMPUTER_PROMPT, COMPUTER_TOOLS, AgentHub, ComputerTools, resolve_vision_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,7 @@ class Settings:
     api_key: Optional[str] = None
     provider: str = "gemini"
     key_env: str = "GEMINI_API_KEY"
+    vision_model: Optional[str] = None
     access_token: Optional[str] = None
     tts_voice: str = "th-TH-PremwadeeNeural"
     whisper_model: str = "base"
@@ -108,6 +112,7 @@ class Settings:
             api_key=llm.api_key,
             provider=llm.provider,
             key_env=llm.key_env,
+            vision_model=resolve_vision_model(llm.provider, llm.model, os.environ.get("JARVIS_VISION_MODEL")),
             access_token=env("JARVIS_ACCESS_TOKEN") or None,
             tts_voice=env("JARVIS_TTS_VOICE") or tts.get("voice", "th-TH-PremwadeeNeural"),
             whisper_model=env("JARVIS_WHISPER_MODEL") or stt.get("model", "base"),
@@ -268,12 +273,18 @@ class Connection:
             self.history.add_user(text)
             self.server.save_message("user", text)
             messages = inject_memory_context(self.history.get_messages(), load_memory_text())
+            tools, dispatch, iterations = CLOUD_TOOLS, _dispatch_cloud_tool, 6
+            if self.server.hub.online:
+                messages = _add_to_system_prompt(messages, COMPUTER_PROMPT)
+                tools = CLOUD_TOOLS + COMPUTER_TOOLS
+                dispatch = self.server.computer_dispatcher(asyncio.get_running_loop())
+                iterations = 12
             response = await asyncio.to_thread(
                 self.server.llm.chat_with_tools,
                 messages=messages,
-                tools=CLOUD_TOOLS,
-                on_tool_call=_dispatch_cloud_tool,
-                max_iterations=6,
+                tools=tools,
+                on_tool_call=dispatch,
+                max_iterations=iterations,
             )
             reply = (response.get("content") or "").strip()
             tools = [t["name"] for t in response.get("tool_results", [])]
@@ -380,6 +391,16 @@ def _dispatch_cloud_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+def _add_to_system_prompt(messages: List[Dict[str, Any]], extra: str) -> List[Dict[str, Any]]:
+    """Return *messages* with *extra* appended to the system message."""
+    out = []
+    for msg in messages:
+        if msg.get("role") == "system" and isinstance(msg.get("content"), str):
+            msg = {**msg, "content": msg["content"] + extra}
+        out.append(msg)
+    return out
+
+
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
@@ -435,6 +456,17 @@ class JarvisServer:
         self.store = store or SessionStore()
         self.whisper = WhisperTranscriber(settings.whisper_model)
         self._failures: Dict[str, List[float]] = {}
+        self.hub = AgentHub()
+        self.connections: Set["Connection"] = set()
+
+    async def broadcast(self, payload: Dict[str, Any]) -> None:
+        for conn in list(self.connections):
+            await conn.send(payload)
+
+    def computer_dispatcher(self, loop: asyncio.AbstractEventLoop) -> ComputerTools:
+        return ComputerTools(
+            self.hub, loop, self.llm._ensure_client(), self.settings.vision_model or self.settings.llm_model
+        )
 
     def save_message(self, role: str, content: str) -> None:
         try:
@@ -500,6 +532,7 @@ class JarvisServer:
                 "provider": self.settings.provider,
                 "key_env": self.settings.key_env,
                 "auth_required": bool(self.settings.access_token),
+                "agent": self.hub.status(),
                 "server_stt": WhisperTranscriber.available(),
             }
 
@@ -573,10 +606,12 @@ class JarvisServer:
                 return
             await ws.accept()
             conn = Connection(ws, self)
+            self.connections.add(conn)
             await conn.send({
                 "type": "hello",
                 "llm_configured": self.ai.configured,
                 "key_env": self.settings.key_env,
+                "agent": self.hub.status(),
                 "history": conn.history.messages[-20:],
             })
             try:
@@ -592,7 +627,37 @@ class JarvisServer:
             except WebSocketDisconnect:
                 pass
             finally:
+                self.connections.discard(conn)
                 await conn.close()
+
+        @app.websocket("/agent")
+        async def agent_endpoint(ws: WebSocket) -> None:
+            """The PC agent connects here (password in a header, never in the URL)."""
+            ip = ws.headers.get("x-forwarded-for", "").split(",")[0].strip() or (ws.client.host if ws.client else "?")
+            auth = ws.headers.get("authorization", "")
+            token = auth[7:] if auth.lower().startswith("bearer ") else None
+            # Without a configured password anyone could take over the agent slot.
+            if not self.settings.access_token or self._too_many_failures(ip) or not self.authorized(token):
+                self._failures.setdefault(ip, []).append(time.monotonic())
+                await ws.close(code=4401)
+                return
+            await ws.accept()
+            info: Dict[str, Any] = {}
+            try:
+                hello = json.loads(await asyncio.wait_for(ws.receive_text(), 15))
+                if isinstance(hello, dict) and hello.get("type") == "hello":
+                    info = {k: hello.get(k) for k in ("host", "os", "screen", "actions")}
+                await self.hub.attach(ws, info)
+                await self.broadcast({"type": "agent_status", **self.hub.status()})
+                while True:
+                    msg = json.loads(await ws.receive_text())
+                    if isinstance(msg, dict) and msg.get("type") == "result":
+                        self.hub.handle_result(msg)
+            except (WebSocketDisconnect, asyncio.TimeoutError, ValueError):
+                pass
+            finally:
+                if self.hub.detach(ws):
+                    await self.broadcast({"type": "agent_status", **self.hub.status()})
 
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
         return app

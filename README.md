@@ -71,6 +71,31 @@ pip install -e '.[web]'
 jarvis --web            # เปิด http://localhost:8000
 ```
 
+### 💻 ให้ JARVIS คุมคอมของคุณ (เปิดแอป, เปิดเว็บ, พิมพ์, คลิก, ปรับเสียง)
+
+คลาวด์มองไม่เห็นจอคุณ จึงต้องมี **PC agent** โปรแกรมเล็ก ๆ บนคอมที่คอยรับคำสั่งจากคลาวด์ ไม่มี AI อยู่ในนั้น
+ไม่กินเครื่อง ต่อออกไปหาเซิร์ฟเวอร์เอง (ไม่ต้องตั้งค่า router) และเปิดเองทุกครั้งที่ล็อกอินเครื่อง
+
+1. โหลดโปรเจกต์นี้ลงคอม: `git clone https://github.com/michoder26-cloud/JARVIS.git && cd JARVIS`
+2. ติดตั้ง (ครั้งเดียว):
+   - **Windows:** `powershell -ExecutionPolicy Bypass -File install-agent.ps1`
+   - **macOS / Linux:** `bash install-agent.sh`
+3. ใส่ที่อยู่ JARVIS (เช่น `https://jarvis-eu.onrender.com`) และรหัสผ่านเว็บเมื่อถูกถาม
+4. ต่อจากนี้ทุกครั้งที่เปิดคอม agent จะเปิดเอง พร้อมหน้าต่าง JARVIS — กด **Hands-free** แล้วพูดว่า "Jarvis เปิด Spotify"
+
+ตัวอย่างที่สั่งได้: "เปิด Spotify", "เปิด YouTube แล้วค้นหาเพลงสบาย ๆ", "เปิด Word แล้วพิมพ์ …", "กดปุ่ม Play",
+"เสียงเบาลง", "ล็อกหน้าจอ", "ตอนนี้บนจอมีอะไร", "ปิดหน้าต่างนี้"
+
+**ความปลอดภัย**
+- agent ทำได้แค่รายการสั้น ๆ: เปิดแอป / เว็บ (http, https เท่านั้น) / พิมพ์ / กดปุ่ม / คลิก / เลื่อน / ปรับเสียง / ล็อกจอ / แคปหน้าจอ
+  **ไม่มี** การรันคำสั่ง shell, เข้าถึงไฟล์, ปิดเครื่อง, รีสตาร์ท, หรือลบอะไรเลย
+- **หยุดฉุกเฉิน:** ลากเมาส์ไปมุมจอใด ๆ จะหยุดการทำงานทันที
+- agent ต่อได้เฉพาะเมื่อเซิร์ฟเวอร์ตั้ง `JARVIS_ACCESS_TOKEN` และส่งรหัสผ่านถูกต้อง — **ใช้รหัสผ่านที่ยาวและเดายาก**
+  เพราะคนที่ล็อกอินเว็บ JARVIS ได้ = คุมคอมคุณได้
+- รหัสผ่านเก็บในไฟล์ `~/.jarvis/agent.json` (สิทธิ์อ่านได้เฉพาะคุณ) — ลบ auto-start ได้ด้วย `jarvis-agent --uninstall`
+- macOS: ต้องอนุญาต Terminal/Python ใน System Settings → Privacy & Security → **Accessibility** และ **Screen Recording**
+- เวลาสั่งงานผ่านจอ (คลิก/ดูหน้าจอ) ภาพหน้าจอจะถูกส่งไปให้ AI (Gemini ฯลฯ) วิเคราะห์ — อย่าใช้ตอนหน้าจอมีข้อมูลลับ
+
 ### ตั้งค่า (environment variables)
 
 | ตัวแปร | ค่าเริ่มต้น | ความหมาย |
@@ -80,6 +105,7 @@ jarvis --web            # เปิด http://localhost:8000
 | `JARVIS_PROVIDER` | `auto` | `gemini` / `groq` / `openai` / `ollama` |
 | `JARVIS_LLM_MODEL` | ตามค่าย | โมเดลหลัก (แชท, โน้ต, สรุป) |
 | `JARVIS_FAST_MODEL` | ตามค่าย | โมเดลสำหรับแปลสด — ใส่โมเดลที่เร็วจะ real-time ขึ้น |
+| `JARVIS_VISION_MODEL` | ตามค่าย | โมเดลที่ดูหน้าจอ (ต้องรองรับรูปภาพ) |
 | `JARVIS_BASE_URL` + `JARVIS_API_KEY` | — | ใช้ endpoint แบบ OpenAI-compatible ตัวไหนก็ได้ |
 | `JARVIS_TIMEZONE` | `Asia/Bangkok` (ใน Docker) | เขตเวลาที่ใช้ตอบ "กี่โมงแล้ว" |
 | `JARVIS_TTS_VOICE` | `th-TH-PremwadeeNeural` | เสียงพูดตอบ (เปลี่ยนภาษาให้อัตโนมัติตามคำตอบ) |
@@ -93,7 +119,7 @@ jarvis --web            # เปิด http://localhost:8000
 - **เลคเชอร์ถูกบันทึกในเบราว์เซอร์ของคุณ** (เมนู 📚) และดาวน์โหลดเป็นไฟล์ได้ — ล้างข้อมูลเบราว์เซอร์แล้วจะหาย
 - ระหว่างบันทึกเลคเชอร์ หน้าจอจะไม่ดับเอง; ถ้าล็อกจอ เบราว์เซอร์มือถือจะหยุดฟัง
 - เปิด "อ่านคำแปลออกเสียง" ควรใช้หูฟัง ไม่งั้นไมค์จะได้ยินเสียงคำแปลเอง
-- **การคุมคอมพิวเตอร์** (เปิดแอป, คลิก, พิมพ์, มองจอ) ทำได้เฉพาะ JARVIS ที่รันบนเครื่องตัวเอง (`jarvis`) — เซิร์ฟเวอร์บนคลาวด์มองไม่เห็นหน้าจอของคุณ
+- **การคุมคอมพิวเตอร์** ต้องติดตั้ง PC agent บนคอม (ดูหัวข้อด้านบน) — เซิร์ฟเวอร์บนคลาวด์มองไม่เห็นหน้าจอของคุณเอง
 
 ## Quick Install (desktop — คุมคอมพิวเตอร์ได้)
 
@@ -300,6 +326,7 @@ Jarvis/
     │   ├── desktop.py           # pyautogui desktop control
     │   ├── system.py            # System commands + weather + time
     │   └── registry.py          # Action dispatch registry
+    ├── agent/                   # PC agent: runs on your computer, obeys the cloud
     ├── web/                     # Cloud web app (FastAPI + browser UI)
     │   ├── server.py            # HTTP/WebSocket API, auth, TTS, Whisper
     │   ├── ai.py                # Streaming translation / notes / summaries
