@@ -8,7 +8,7 @@ dict asking for confirmation so the LLM/voice layer can get user approval first.
 from __future__ import annotations
 
 import datetime
-import locale
+import os
 import platform
 import subprocess
 import urllib.request
@@ -131,22 +131,33 @@ def system_command(command: str) -> dict:
         return {"success": False, "error": str(exc)}
 
 
-def get_time() -> dict:
-    """Return the current time as a human-readable string in the user's locale."""
-    try:
-        # Try to use the system locale; fall back to default if unavailable.
+def _now() -> datetime.datetime:
+    """Current time in ``JARVIS_TIMEZONE`` (e.g. ``Asia/Bangkok``) if set.
+
+    Cloud servers usually run in UTC, so the timezone must be configurable
+    for "what time is it" to be answered correctly.
+    """
+    tz_name = os.environ.get("JARVIS_TIMEZONE", "").strip()
+    if tz_name:
         try:
-            loc = locale.getdefaultlocale()[0]
-            if loc:
-                locale.setlocale(locale.LC_TIME, loc)
-        except Exception:
+            from zoneinfo import ZoneInfo
+
+            return datetime.datetime.now(ZoneInfo(tz_name))
+        except Exception:  # noqa: BLE001 — unknown zone: fall back to local time
             pass
-        now = datetime.datetime.now()
+    return datetime.datetime.now().astimezone()
+
+
+def get_time() -> dict:
+    """Return the current date and time."""
+    try:
+        now = _now()
         return {
             "success": True,
             "time": now.strftime("%I:%M %p"),
             "time_24h": now.strftime("%H:%M"),
             "date": now.strftime("%A, %B %d, %Y"),
+            "timezone": now.tzname() or "",
             "iso": now.isoformat(),
         }
     except Exception as exc:  # noqa: BLE001

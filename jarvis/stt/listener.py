@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 TranscriptCallback = Callable[[str], None]
 
 
+def _detect_device() -> str:
+    """Return ``"cuda"`` when a CUDA GPU is usable, else ``"cpu"``.
+
+    RealtimeSTT defaults to CUDA, which fails on most laptops and Macs.
+    """
+    try:
+        import ctranslate2  # type: ignore
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+    except Exception:  # noqa: BLE001
+        pass
+    return "cpu"
+
+
 class STTListener:
     """Continuous speech-to-text listener with wake-word support.
 
@@ -59,8 +74,8 @@ class STTListener:
         push_to_talk: bool = False,
     ) -> None:
         self.model = model
-        # RealtimeSTT / faster-whisper use ``None`` for auto-detect.
-        self.language: Optional[str] = None if language == "auto" else language
+        # RealtimeSTT uses an empty string for auto-detect.
+        self.language: str = "" if language in (None, "", "auto") else language
         self.wake_word = wake_word.lower().strip()
         self.silence_threshold = silence_threshold
         self.on_transcript = on_transcript
@@ -118,10 +133,12 @@ class STTListener:
         self._recorder = AudioToTextRecorder(
             model=self.model,
             language=self.language,
-            # RealtimeSTT uses spinner + post_speech_silence for endpointing
-            post_speech_silence=self.silence_threshold,
+            device=_detect_device(),
+            # Seconds of silence that end an utterance.
+            post_speech_silence_duration=self.silence_threshold,
             # Print nothing during normal operation; JARVIS handles UI.
-            print_transcript_time=False,
+            print_transcription_time=False,
+            spinner=False,
             silero_use_onnx=False,
         )
         return self._recorder

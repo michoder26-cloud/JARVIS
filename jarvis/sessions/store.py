@@ -20,17 +20,17 @@ messages
 
 from __future__ import annotations
 
+import contextlib
 import datetime
-import json
 import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_DIR = Path(os.path.expanduser("~/.jarvis"))
+DEFAULT_DB_DIR = Path(os.environ.get("JARVIS_DATA_DIR", "~/.jarvis")).expanduser()
 DEFAULT_DB_PATH = DEFAULT_DB_DIR / "sessions.db"
 
 
@@ -61,11 +61,20 @@ class SessionStore:
     # ------------------------------------------------------------------ #
     # Schema
     # ------------------------------------------------------------------ #
-    def _connect(self) -> sqlite3.Connection:
-        """Open a new SQLite connection with row factory enabled."""
-        conn = sqlite3.connect(self.db_path)
+    @contextlib.contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a connection, commit on success, and always close it.
+
+        ``with sqlite3.connect(...)`` alone only commits — it never closes
+        the connection, which leaks file handles in a long-running server.
+        """
+        conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         """Create tables if they don't already exist."""

@@ -25,10 +25,17 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Path to the persistent memory file.
-MEMORY_DIR = Path(os.path.expanduser("~/.jarvis"))
+MEMORY_DIR = Path(os.environ.get("JARVIS_DATA_DIR", "~/.jarvis")).expanduser()
 MEMORY_FILE = MEMORY_DIR / "MEMORY.md"
 
-__all__ = ["memory_manage", "think", "MEMORY_FILE", "MEMORY_DIR"]
+__all__ = [
+    "memory_manage",
+    "think",
+    "load_memory_text",
+    "inject_memory_context",
+    "MEMORY_FILE",
+    "MEMORY_DIR",
+]
 
 
 # --------------------------------------------------------------------------- #
@@ -75,6 +82,38 @@ def _write_entries(entries: list[str]) -> None:
         f"{body}\n"
     )
     MEMORY_FILE.write_text(content, encoding="utf-8")
+
+
+def load_memory_text() -> str:
+    """Return the memory file contents, or ``""`` when absent or empty."""
+    try:
+        if MEMORY_FILE.exists():
+            return MEMORY_FILE.read_text(encoding="utf-8").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not load memory file %s: %s", MEMORY_FILE, exc)
+    return ""
+
+
+def inject_memory_context(messages: list, memory_text: str) -> list:
+    """Return a copy of *messages* with *memory_text* appended to the system prompt."""
+    if not memory_text:
+        return messages
+    memory_block = (
+        "\n# Persistent Memory\n"
+        "The following facts and preferences have been remembered "
+        "across sessions. Use them to personalise responses but do not "
+        "mention the memory file itself to the user.\n\n"
+        f"{memory_text}\n"
+    )
+    updated = []
+    for msg in messages:
+        if msg.get("role") == "system" and "content" in msg:
+            new_msg = dict(msg)
+            new_msg["content"] = msg["content"] + memory_block
+            updated.append(new_msg)
+        else:
+            updated.append(msg)
+    return updated
 
 
 # --------------------------------------------------------------------------- #

@@ -29,8 +29,6 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Defaults
 # --------------------------------------------------------------------------- #
-DEFAULT_MODEL = os.environ.get("JARVIS_VISION_MODEL", "minimax-m3")
-DEFAULT_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "https://ollama.com/v1")
 
 # Reuse a screenshot if it was captured within this many seconds.
 CACHE_TTL_SECONDS = 1.0
@@ -110,13 +108,18 @@ class ScreenVision:
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: Optional[str] = None,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
     ) -> None:
-        self.model = model
-        self.base_url = base_url or DEFAULT_BASE_URL
-        self._api_key = api_key or os.environ.get("OLLAMA_API_KEY")
+        from jarvis.brain.providers import resolve
+
+        llm = resolve()
+        # Ollama's default chat model has no vision; other presets do.
+        default_model = "minimax-m3" if llm.provider == "ollama" else llm.model
+        self.model = model or os.environ.get("JARVIS_VISION_MODEL") or default_model
+        self.base_url = base_url or llm.base_url
+        self._api_key = api_key or llm.api_key
         self._client = None  # lazy OpenAI client
 
         # Screenshot cache: (base64_str, capture_time, width, height).

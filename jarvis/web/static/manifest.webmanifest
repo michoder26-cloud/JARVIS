@@ -1,0 +1,12 @@
+{
+  "name": "JARVIS",
+  "short_name": "JARVIS",
+  "description": "Cloud AI assistant: chat, live translation and lecture notes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f17",
+  "theme_color": "#0a0f17",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

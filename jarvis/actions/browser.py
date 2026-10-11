@@ -16,7 +16,11 @@ import platform
 import time
 from typing import Optional
 
-from playwright.sync_api import sync_playwright, Error as PlaywrightError
+try:
+    from playwright.sync_api import sync_playwright, Error as PlaywrightError
+except ImportError:  # Playwright is optional — keep the rest of JARVIS importable.
+    sync_playwright = None
+    PlaywrightError = Exception  # type: ignore[assignment,misc]
 
 __all__ = [
     "open_browser",
@@ -72,6 +76,11 @@ class BrowserController:
             except PlaywrightError:
                 self._reset()
 
+        if sync_playwright is None:
+            raise RuntimeError(
+                "Playwright is not installed. Run `pip install playwright` "
+                "and `playwright install chromium`."
+            )
         self._playwright = sync_playwright().start()
         launch_kwargs: dict = {"headless": _HEADLESS}
         # Prefer installed Chrome when available; fall back to bundled Chromium.

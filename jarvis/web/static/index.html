@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>JARVIS</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon.svg">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <!-- Login -->
+  <section id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="arc arc-lg" aria-hidden="true"></div>
+      <h1>JARVIS</h1>
+      <p>ใส่รหัสเข้าใช้งาน (JARVIS_ACCESS_TOKEN)</p>
+      <form id="login-form">
+        <input id="login-token" type="password" autocomplete="current-password" placeholder="Access token" required>
+        <button class="btn primary" type="submit">เข้าสู่ระบบ</button>
+      </form>
+      <p id="login-error" class="error" hidden></p>
+    </div>
+  </section>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="arc" aria-hidden="true"></span><span>JARVIS</span></div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="assistant" class="tab">ผู้ช่วย</button>
+        <button role="tab" data-tab="translate" class="tab">แปลสด</button>
+        <button role="tab" data-tab="lecture" class="tab">สรุปเลคเชอร์</button>
+      </nav>
+      <div class="top-actions">
+        <span id="agent" class="conn" title="คอมพิวเตอร์ของคุณ"><i></i><b>PC</b></span>
+        <span id="conn" class="conn" title="Connection"><i></i><b>offline</b></span>
+        <button id="open-settings" class="icon-btn" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <!-- Assistant -->
+    <main id="tab-assistant" class="panel" data-panel="assistant">
+      <div id="chat-log" class="chat-log" aria-live="polite">
+        <div class="empty-hint">
+          <div class="arc arc-lg" aria-hidden="true"></div>
+          <p>สวัสดีครับ ถามอะไรก็ได้ — ข่าว, อากาศ, ค้นเว็บ, จดจำสิ่งที่คุณบอก</p>
+          <p class="muted">แตะไมค์เพื่อพูด หรือเปิด "Hands-free" แล้วพูดว่า "Jarvis …"</p>
+        </div>
+      </div>
+      <div class="interim" id="chat-interim"></div>
+      <form id="chat-form" class="composer">
+        <button type="button" id="chat-mic" class="mic" aria-label="Speak">🎤</button>
+        <input id="chat-input" autocomplete="off" placeholder="พิมพ์หรือพูดคำสั่ง…">
+        <button class="btn primary" type="submit">ส่ง</button>
+      </form>
+      <div class="toolbar">
+        <label class="switch"><input type="checkbox" id="handsfree"><span>Hands-free ("Jarvis …")</span></label>
+        <select id="hf-lang" class="lang-select" aria-label="ภาษาที่พูดกับ JARVIS"></select>
+        <label class="switch"><input type="checkbox" id="chat-voice" checked><span>ตอบด้วยเสียง</span></label>
+        <button id="chat-reset" class="btn ghost small" type="button">ล้างแชท</button>
+      </div>
+    </main>
+
+    <!-- Live translate -->
+    <main id="tab-translate" class="panel" data-panel="translate" hidden>
+      <div class="controls">
+        <label>จากภาษา<select id="tr-source" class="lang-select"></select></label>
+        <button id="tr-swap" class="icon-btn" type="button" aria-label="Swap languages">⇄</button>
+        <label>เป็นภาษา<select id="tr-target" class="lang-select"></select></label>
+      </div>
+      <div id="tr-log" class="captions" aria-live="polite">
+        <div class="empty-hint"><p>กด "เริ่มแปล" แล้วพูด — คำแปลจะขึ้นทันทีที่จบแต่ละประโยค</p></div>
+      </div>
+      <div class="interim" id="tr-interim"></div>
+      <div class="toolbar">
+        <button id="tr-start" class="btn primary big" type="button">▶ เริ่มแปล</button>
+        <label class="switch"><input type="checkbox" id="tr-speak"><span>อ่านคำแปลออกเสียง</span></label>
+        <label class="switch"><input type="checkbox" id="tr-big"><span>ตัวใหญ่</span></label>
+        <button id="tr-clear" class="btn ghost small" type="button">ล้าง</button>
+      </div>
+    </main>
+
+    <!-- Lecture -->
+    <main id="tab-lecture" class="panel lecture" data-panel="lecture" hidden>
+      <div class="controls wrap">
+        <input id="lec-title" class="grow" placeholder="ชื่อวิชา / หัวข้อ (ไม่บังคับ)">
+        <label>อาจารย์พูดภาษา<select id="lec-lang" class="lang-select"></select></label>
+        <label>สรุปเป็นภาษา<select id="lec-notes-lang" class="lang-select"></select></label>
+        <label class="switch"><input type="checkbox" id="lec-translate"><span>แปลซับด้วย</span></label>
+      </div>
+      <div class="toolbar">
+        <button id="lec-start" class="btn primary big" type="button">● เริ่มบันทึก</button>
+        <span id="lec-timer" class="timer">00:00</span>
+        <button id="lec-finish" class="btn" type="button" disabled>สรุปเลคเชอร์</button>
+        <button id="lec-new" class="btn ghost small" type="button">เริ่มใหม่</button>
+        <select id="lec-history" class="history-select" aria-label="Saved lectures"><option value="">📚 เลคเชอร์ที่บันทึกไว้</option></select>
+      </div>
+      <div class="lecture-grid">
+        <section class="card">
+          <h2>Transcript <span class="muted" id="lec-count"></span></h2>
+          <div id="lec-transcript" class="captions small" aria-live="polite"></div>
+          <div class="interim" id="lec-interim"></div>
+        </section>
+        <section class="card">
+          <h2>โน้ตสด <span class="pulse" id="notes-busy" hidden></span></h2>
+          <div id="lec-notes" class="md"><p class="muted">โน้ตจะอัปเดตอัตโนมัติระหว่างที่อาจารย์สอน</p></div>
+        </section>
+        <section class="card wide" id="lec-summary-card" hidden>
+          <h2>สรุปเลคเชอร์ <span class="pulse" id="summary-busy" hidden></span></h2>
+          <div id="lec-summary" class="md"></div>
+          <div class="toolbar">
+            <button id="lec-copy" class="btn small" type="button">คัดลอก</button>
+            <button id="lec-download" class="btn small" type="button">ดาวน์โหลด .md</button>
+          </div>
+        </section>
+        <section class="card wide">
+          <h2>ถามเกี่ยวกับเลคเชอร์นี้</h2>
+          <form id="lec-ask-form" class="composer">
+            <input id="lec-ask" autocomplete="off" placeholder="เช่น: อาจารย์สั่งการบ้านอะไร? / อธิบาย X อีกที">
+            <button class="btn primary" type="submit">ถาม</button>
+          </form>
+          <div id="lec-answer" class="md"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings -->
+  <dialog id="settings">
+    <form method="dialog" class="settings">
+      <h2>ตั้งค่า</h2>
+      <label>ระบบฟังเสียง
+        <select id="set-engine">
+          <option value="auto">อัตโนมัติ (แนะนำ)</option>
+          <option value="browser">เบราว์เซอร์ (เร็ว, real-time)</option>
+          <option value="server">Whisper บนเซิร์ฟเวอร์</option>
+        </select>
+      </label>
+      <p class="muted" id="engine-note"></p>
+      <label>เสียงพูดตอบ
+        <select id="set-tts">
+          <option value="server">Neural voice (edge-tts)</option>
+          <option value="browser">เสียงของเครื่อง</option>
+        </select>
+      </label>
+      <div class="muted" id="server-info"></div>
+      <menu>
+        <button class="btn ghost" id="logout" type="button">ออกจากระบบ</button>
+        <button class="btn primary" value="close">ปิด</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

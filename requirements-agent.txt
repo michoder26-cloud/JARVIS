@@ -1,0 +1,5 @@
+# Dependencies for the PC agent only (jarvis-agent). No AI libraries needed.
+websockets>=14.0
+pyautogui>=0.9.54
+pyperclip>=1.8
+pillow>=10.0

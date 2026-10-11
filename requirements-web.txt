@@ -1,0 +1,10 @@
+# Dependencies for the cloud web app only (no desktop automation, no PyTorch).
+# Used by the Dockerfile: pip install -r requirements-web.txt
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+openai>=1.0.0
+edge-tts>=7.0.0
+python-dotenv>=1.0.0
+pyyaml>=6.0
+ddgs>=9.0.0
+httpx>=0.25.0

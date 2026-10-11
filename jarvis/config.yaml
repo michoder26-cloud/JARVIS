@@ -1,7 +1,9 @@
 llm:
-  model: glm-5.2
-  base_url: https://ollama.com/v1
-  # API key: set OLLAMA_API_KEY in .env or environment
+  # auto = pick from whichever key is set: GEMINI_API_KEY (free, recommended),
+  # GROQ_API_KEY, OPENAI_API_KEY or OLLAMA_API_KEY.
+  provider: auto
+  # model: gemini-3.8-flash      # optional: override the provider's default
+  # fast_model: ...               # optional: faster model for live translation
   
 stt:
   model: base              # tiny/base/small/medium/large-v3
@@ -16,6 +18,7 @@ tts:
   #          de-DE-KatjaNeural (female), de-DE-ConradNeural (male)
   rate: 0                    # 0 = normal, +50 = faster, -20 = slower
   volume: 0                  # 0 = normal, +100 = max, -50 = quieter
+  auto_voice: true           # switch voice to match the reply's language
 
 automation:
   browser: playwright

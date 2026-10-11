@@ -7,15 +7,121 @@ Say **"Jarvis, open YouTube"** — and it opens Chrome, navigates to YouTube, an
 ## Features
 
 - 🎤 **Voice recognition** (STT) — faster-whisper, works offline
-- 🧠 **AI brain** — Ollama Cloud (glm-5.2) with function calling
+- 🧠 **AI brain** — Gemini (free), Groq, OpenAI or Ollama Cloud, with function calling
 - 🖥️ **Desktop automation** — opens apps, types, clicks, screenshots
 - 🌐 **Browser automation** — opens Chrome, searches YouTube/Google
 - 🔊 **Voice response** (TTS) — edge-tts, free Microsoft neural voices
 - 🌍 **Multilingual** — Thai 🇹🇭, English 🇺🇸, German 🇩🇪
 - 💬 **Conversation memory** — remembers previous commands
 - ❓ **Ask for clarification** — if command is ambiguous, asks you back
+- ☁️ **Cloud web app** — use JARVIS from any phone/browser: assistant, real-time translation, live lecture notes & summaries
 
-## Quick Install
+## ☁️ JARVIS on the Cloud (ใช้งานผ่านมือถือ/เบราว์เซอร์ ไม่ต้องรันบนเครื่องตัวเอง)
+
+รัน JARVIS บนเซิร์ฟเวอร์ แล้วเปิดใช้จากมือถือหรือโน้ตบุ๊กเครื่องไหนก็ได้ผ่านเบราว์เซอร์
+(กด "Add to Home Screen" จะได้ไอคอนเหมือนแอป)
+
+| แท็บ | ทำอะไร |
+|------|--------|
+| **ผู้ช่วย** | คุยด้วยเสียงหรือพิมพ์ — ค้นเว็บ, ข่าว, อากาศ, เวลา, จำสิ่งที่คุณบอก. โหมด Hands-free: พูด "Jarvis …" ได้เลย |
+| **แปลสด** | พูดแล้วคำแปลขึ้นทันทีทีละประโยค (8 ภาษา: ไทย/อังกฤษ/เยอรมัน/ญี่ปุ่น/จีน/เกาหลี/ฝรั่งเศส/สเปน) อ่านออกเสียงได้ |
+| **สรุปเลคเชอร์** | ถอดเสียงอาจารย์แบบ real-time, โน้ตอัปเดตเองระหว่างสอน, แปลซับได้, กด "สรุปเลคเชอร์" ได้สรุป + คำถามทบทวน, ถามคำถามเกี่ยวกับเลคเชอร์ได้, ดาวน์โหลดเป็น .md |
+
+### ขั้นแรก: ขอ API key ฟรี
+
+JARVIS ใช้ AI ได้หลายค่าย — แนะนำ **Google Gemini** (ฟรี ไม่ต้องใช้บัตรเครดิต ภาษาไทยดี):
+
+1. เข้า https://aistudio.google.com/apikey แล้วล็อกอินด้วยบัญชี Google
+2. กด **Create API key** แล้วคัดลอก key ไว้
+
+| ค่าย | ตัวแปร | หมายเหตุ |
+|------|--------|----------|
+| Google Gemini | `GEMINI_API_KEY` | ฟรี, แนะนำ |
+| Groq | `GROQ_API_KEY` | ฟรี, เร็วมาก (เหมาะกับแปลสด) — https://console.groq.com/keys |
+| OpenAI | `OPENAI_API_KEY` | เสียเงิน |
+| Ollama Cloud | `OLLAMA_API_KEY` | |
+
+ตั้งแค่ตัวใดตัวหนึ่ง JARVIS จะเลือกค่ายให้อัตโนมัติ
+
+> Free tier ของ Gemini: Google อาจนำข้อความที่ส่งไปใช้ปรับปรุงบริการ — อย่าใช้กับข้อมูลลับ
+
+### Deploy ฟรีบน Render (แนะนำ)
+
+1. สมัคร https://render.com แล้วเชื่อม GitHub
+2. **New → Blueprint** → เลือก repo นี้ (Render อ่าน `render.yaml` ให้เอง)
+3. ใส่ค่า 2 ตัว:
+   - `GEMINI_API_KEY` — key จากขั้นแรก
+   - `JARVIS_ACCESS_TOKEN` — รหัสผ่านสำหรับเข้าเว็บ (ตั้งเองให้เดายาก) ⚠️ ถ้าไม่ตั้ง ใครเจอ URL ก็ใช้โควต้า AI ของคุณได้
+4. รอ deploy เสร็จ → เปิด `https://<ชื่อ>.onrender.com` บนมือถือ → ใส่รหัส → ใช้งานได้เลย
+
+> Render แพ็กเกจฟรีจะ "หลับ" เมื่อไม่มีคนใช้ 15 นาที — เปิดครั้งแรกรอ ~1 นาที. ถ้าต้องการให้ตื่นตลอดใช้แพ็กเกจ Starter
+> หรือ deploy ที่อื่นที่รัน Docker ได้ (Fly.io, Railway, Google Cloud Run, VPS)
+
+### รันด้วย Docker (ที่ไหนก็ได้)
+
+```bash
+docker build -t jarvis .
+docker run -p 8000:8000 -e GEMINI_API_KEY=... -e JARVIS_ACCESS_TOKEN=... -v jarvis-data:/data jarvis
+```
+
+### ทดสอบบนเครื่อง
+
+```bash
+pip install -e '.[web]'
+jarvis --web            # เปิด http://localhost:8000
+```
+
+### 💻 ให้ JARVIS คุมคอมของคุณ (เปิดแอป, เปิดเว็บ, พิมพ์, คลิก, ปรับเสียง)
+
+คลาวด์มองไม่เห็นจอคุณ จึงต้องมี **PC agent** โปรแกรมเล็ก ๆ บนคอมที่คอยรับคำสั่งจากคลาวด์ ไม่มี AI อยู่ในนั้น
+ไม่กินเครื่อง ต่อออกไปหาเซิร์ฟเวอร์เอง (ไม่ต้องตั้งค่า router) และเปิดเองทุกครั้งที่ล็อกอินเครื่อง
+
+1. โหลดโปรเจกต์นี้ลงคอม: `git clone https://github.com/michoder26-cloud/JARVIS.git && cd JARVIS`
+2. ติดตั้ง (ครั้งเดียว):
+   - **Windows:** `powershell -ExecutionPolicy Bypass -File install-agent.ps1`
+   - **macOS / Linux:** `bash install-agent.sh`
+3. ใส่ที่อยู่ JARVIS (เช่น `https://jarvis-eu.onrender.com`) และรหัสผ่านเว็บเมื่อถูกถาม
+4. ต่อจากนี้ทุกครั้งที่เปิดคอม agent จะเปิดเอง พร้อมหน้าต่าง JARVIS — กด **Hands-free** แล้วพูดว่า "Jarvis เปิด Spotify"
+
+ตัวอย่างที่สั่งได้: "เปิด Spotify", "เปิด YouTube แล้วค้นหาเพลงสบาย ๆ", "เปิด Word แล้วพิมพ์ …", "กดปุ่ม Play",
+"เสียงเบาลง", "ล็อกหน้าจอ", "ตอนนี้บนจอมีอะไร", "ปิดหน้าต่างนี้"
+
+**ความปลอดภัย**
+- agent ทำได้แค่รายการสั้น ๆ: เปิดแอป / เว็บ (http, https เท่านั้น) / พิมพ์ / กดปุ่ม / คลิก / เลื่อน / ปรับเสียง / ล็อกจอ / แคปหน้าจอ
+  **ไม่มี** การรันคำสั่ง shell, เข้าถึงไฟล์, ปิดเครื่อง, รีสตาร์ท, หรือลบอะไรเลย
+- **หยุดฉุกเฉิน:** ลากเมาส์ไปมุมจอใด ๆ จะหยุดการทำงานทันที
+- agent ต่อได้เฉพาะเมื่อเซิร์ฟเวอร์ตั้ง `JARVIS_ACCESS_TOKEN` และส่งรหัสผ่านถูกต้อง — **ใช้รหัสผ่านที่ยาวและเดายาก**
+  เพราะคนที่ล็อกอินเว็บ JARVIS ได้ = คุมคอมคุณได้
+- รหัสผ่านเก็บในไฟล์ `~/.jarvis/agent.json` (สิทธิ์อ่านได้เฉพาะคุณ) — ลบ auto-start ได้ด้วย `jarvis-agent --uninstall`
+- macOS: ต้องอนุญาต Terminal/Python ใน System Settings → Privacy & Security → **Accessibility** และ **Screen Recording**
+- เวลาสั่งงานผ่านจอ (คลิก/ดูหน้าจอ) ภาพหน้าจอจะถูกส่งไปให้ AI (Gemini ฯลฯ) วิเคราะห์ — อย่าใช้ตอนหน้าจอมีข้อมูลลับ
+
+### ตั้งค่า (environment variables)
+
+| ตัวแปร | ค่าเริ่มต้น | ความหมาย |
+|--------|-----------|----------|
+| `GEMINI_API_KEY` (หรือ key ค่ายอื่น) | — | API key ของ AI (จำเป็น) |
+| `JARVIS_ACCESS_TOKEN` | — | รหัสผ่านเข้าเว็บ (ควรตั้ง) |
+| `JARVIS_PROVIDER` | `auto` | `gemini` / `groq` / `openai` / `ollama` |
+| `JARVIS_LLM_MODEL` | ตามค่าย | โมเดลหลัก (แชท, โน้ต, สรุป) |
+| `JARVIS_FAST_MODEL` | ตามค่าย | โมเดลสำหรับแปลสด — ใส่โมเดลที่เร็วจะ real-time ขึ้น |
+| `JARVIS_VISION_MODEL` | ตามค่าย | โมเดลที่ดูหน้าจอ (ต้องรองรับรูปภาพ) |
+| `JARVIS_BASE_URL` + `JARVIS_API_KEY` | — | ใช้ endpoint แบบ OpenAI-compatible ตัวไหนก็ได้ |
+| `JARVIS_TIMEZONE` | `Asia/Bangkok` (ใน Docker) | เขตเวลาที่ใช้ตอบ "กี่โมงแล้ว" |
+| `JARVIS_TTS_VOICE` | `th-TH-PremwadeeNeural` | เสียงพูดตอบ (เปลี่ยนภาษาให้อัตโนมัติตามคำตอบ) |
+| `JARVIS_DATA_DIR` | `~/.jarvis` | ที่เก็บความจำและประวัติแชท |
+
+### เรื่องที่ควรรู้
+
+- **การฟังเสียง** ใช้ระบบในเบราว์เซอร์ (Chrome / Edge / Safari) — เร็วและ real-time ที่สุด.
+  Firefox ไม่มีระบบนี้ → build Docker ด้วย `--build-arg WITH_WHISPER=1` เพื่อใช้ Whisper บนเซิร์ฟเวอร์ (ต้องการ RAM ~1GB)
+- **ไมโครโฟนต้องใช้ HTTPS** — Render/Fly ให้ HTTPS อัตโนมัติ
+- **เลคเชอร์ถูกบันทึกในเบราว์เซอร์ของคุณ** (เมนู 📚) และดาวน์โหลดเป็นไฟล์ได้ — ล้างข้อมูลเบราว์เซอร์แล้วจะหาย
+- ระหว่างบันทึกเลคเชอร์ หน้าจอจะไม่ดับเอง; ถ้าล็อกจอ เบราว์เซอร์มือถือจะหยุดฟัง
+- เปิด "อ่านคำแปลออกเสียง" ควรใช้หูฟัง ไม่งั้นไมค์จะได้ยินเสียงคำแปลเอง
+- **การคุมคอมพิวเตอร์** ต้องติดตั้ง PC agent บนคอม (ดูหัวข้อด้านบน) — เซิร์ฟเวอร์บนคลาวด์มองไม่เห็นหน้าจอของคุณเอง
+
+## Quick Install (desktop — คุมคอมพิวเตอร์ได้)
 
 ### macOS
 
@@ -40,9 +146,9 @@ cd JARVIS
 bash install.sh
 ```
 
-#### 5. ตั้งค่า API Key
+#### 5. ตั้งค่า API Key (ขอฟรีที่ https://aistudio.google.com/apikey)
 ```bash
-echo 'export OLLAMA_API_KEY=ใส่keyของคุณที่นี่' >> ~/.zshrc
+echo 'export GEMINI_API_KEY=ใส่keyของคุณที่นี่' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -73,9 +179,9 @@ cd JARVIS
 bash install.sh
 ```
 
-#### 4. ตั้งค่า API Key
+#### 4. ตั้งค่า API Key (ขอฟรีที่ https://aistudio.google.com/apikey)
 ```bash
-echo 'export OLLAMA_API_KEY=ใส่keyของคุณที่นี่' >> ~/.bashrc
+echo 'export GEMINI_API_KEY=ใส่keyของคุณที่นี่' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -107,7 +213,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 #### 4. ตั้งค่า API Key
 ```powershell
-[System.Environment]::SetEnvironmentVariable("OLLAMA_API_KEY", "ใส่keyของคุณที่นี่", "User")
+[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "ใส่keyของคุณที่นี่", "User")
 ```
 ปิด PowerShell แล้วเปิดใหม่
 
@@ -134,6 +240,7 @@ jarvis --llm-model minimax-m3   # use a different LLM
 jarvis --text-mode          # text-only mode (no mic needed)
 jarvis --verbose            # debug logging
 jarvis --list-audio         # show audio devices
+jarvis --web                # cloud web app on http://localhost:8000
 ```
 
 Say **"Jarvis"** then your command:
@@ -163,8 +270,7 @@ Edit `jarvis/config.yaml`:
 
 ```yaml
 llm:
-  model: glm-5.2
-  base_url: https://ollama.com/v1
+  provider: auto          # gemini / groq / openai / ollama
 
 stt:
   model: base              # tiny/base/small/medium/large-v3
@@ -194,9 +300,9 @@ hotkey:
 
 ### API Key
 
-Set your Ollama Cloud API key in `.env` or environment:
+Set your API key in `.env` or environment (free Gemini key: https://aistudio.google.com/apikey):
 ```bash
-export OLLAMA_API_KEY=your-key-here
+export GEMINI_API_KEY=your-key-here
 ```
 
 ## Project Layout
@@ -220,6 +326,11 @@ Jarvis/
     │   ├── desktop.py           # pyautogui desktop control
     │   ├── system.py            # System commands + weather + time
     │   └── registry.py          # Action dispatch registry
+    ├── agent/                   # PC agent: runs on your computer, obeys the cloud
+    ├── web/                     # Cloud web app (FastAPI + browser UI)
+    │   ├── server.py            # HTTP/WebSocket API, auth, TTS, Whisper
+    │   ├── ai.py                # Streaming translation / notes / summaries
+    │   └── static/              # index.html, app.js, app.css
     └── utils/audio.py           # Audio device helpers
 ```
 
@@ -233,7 +344,7 @@ RealtimeSTT + faster-whisper     ← STT: speech → text (Thai/EN/DE)
     │
     ▼ (wake word "Jarvis" detected)
     │
-LLM Brain (glm-5.2 via Ollama Cloud)
+LLM Brain (Gemini / Groq / OpenAI / Ollama)
     │
     ├──→ Text Response ──→ edge-tts ──→ 🔊 Speaker
     │                                      (Thai/EN/DE voice)
@@ -253,9 +364,16 @@ Browser Auto    Desktop Auto
 | No microphone | `jarvis --list-audio` to check; use `--text-mode` fallback |
 | TTS silent | Install `ffmpeg` (installer does this on Linux) |
 | Slow first start | Whisper downloads model on first use (~150MB for `base`) |
-| API error | Check `OLLAMA_API_KEY` is set in `.env` or environment |
+| API error | Check your API key (e.g. `GEMINI_API_KEY`) is set in `.env` or environment |
 | Browser doesn't open | Run `playwright install chromium` |
 | Desktop automation fails on Linux | Needs X11 display — use on Windows or Linux with desktop |
+
+## Development
+
+```bash
+pip install -e '.[web]' pytest
+python -m pytest tests
+```
 
 ## License
 

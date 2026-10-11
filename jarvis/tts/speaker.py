@@ -14,8 +14,8 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import re
 import tempfile
-import wave
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,51 @@ VOICES: Dict[str, str] = {
 }
 
 
+# Default voice per language for automatic selection.
+LANGUAGE_VOICES: Dict[str, str] = {
+    "th": "th-TH-PremwadeeNeural",
+    "en": "en-US-AriaNeural",
+    "de": "de-DE-KatjaNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "zh": "zh-CN-XiaoxiaoNeural",
+    "ko": "ko-KR-SunHiNeural",
+}
+
+_GERMAN_HINTS = re.compile(
+    r"[äöüß]|\b(und|ist|nicht|ich|das|die|der|wie|sie|wir)\b", re.IGNORECASE
+)
+
+
+def detect_language(text: str) -> str:
+    """Best-effort language guess from the characters in *text*.
+
+    Returns one of the keys in :data:`LANGUAGE_VOICES` (``"en"`` by default).
+    """
+    if re.search(r"[\u0E00-\u0E7F]", text):
+        return "th"
+    if re.search(r"[\u3040-\u30FF]", text):
+        return "ja"
+    if re.search(r"[\uAC00-\uD7AF]", text):
+        return "ko"
+    if re.search(r"[\u4E00-\u9FFF]", text):
+        return "zh"
+    if _GERMAN_HINTS.search(text):
+        return "de"
+    return "en"
+
+
+def pick_voice(text: str, default: str) -> str:
+    """Choose a voice that can pronounce *text*.
+
+    Keeps *default* when it already matches the detected language, so a
+    user-chosen voice (e.g. a male Thai voice) is respected.
+    """
+    lang = detect_language(text)
+    if default.lower().startswith(lang + "-"):
+        return default
+    return LANGUAGE_VOICES.get(lang, default)
+
+
 class TTSSpeaker:
     """Speak text aloud using edge-tts.
 
@@ -48,6 +93,9 @@ class TTSSpeaker:
     volume : int
         Volume adjustment as a percentage: ``0`` = normal, ``+100`` = max,
         ``-50`` = quieter.
+    auto_voice : bool
+        Switch to a matching voice when the text is in another language
+        (e.g. English reply with a Thai default voice).
     """
 
     def __init__(
@@ -55,10 +103,12 @@ class TTSSpeaker:
         voice: str = "th-TH-PremwadeeNeural",
         rate: int = 0,
         volume: int = 0,
+        auto_voice: bool = True,
     ) -> None:
         self.voice = VOICES.get(voice, voice)  # resolve alias if needed
         self.rate = rate
         self.volume = volume
+        self.auto_voice = auto_voice
         self._edge_tts = None  # lazy import
 
     # ------------------------------------------------------------------ #
@@ -102,7 +152,12 @@ class TTSSpeaker:
             MP3 audio data.
         """
         edge_tts = self._ensure_edge_tts()
-        voice = voice or self.voice
+        if voice:
+            voice = VOICES.get(voice, voice)
+        elif self.auto_voice:
+            voice = pick_voice(text, self.voice)
+        else:
+            voice = self.voice
         communicate = edge_tts.Communicate(
             text=text,
             voice=voice,
@@ -208,7 +263,7 @@ def _play_mp3(mp3_data: bytes) -> None:
         import numpy as np  # type: ignore
 
         # Decode MP3 → PCM via ffmpeg if available.
-        import shutil, subprocess, sys
+        import shutil, subprocess
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg:
             proc = subprocess.run(
